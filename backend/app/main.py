@@ -1,20 +1,20 @@
 import json
+import os
 import numpy as np
 import tensorflow as tf
 from fastapi import FastAPI, HTTPException
-from app.core.config import settings
-from app.api.endpoints import movies  
-from app.db.session import engine  
-from app.db import models  
+
+# ── LOCK PATH ABSOLUT FILE KONFIGURASI DAN MODEL ──────────────────────
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+CONFIG_PATH = os.path.join(BASE_DIR, "model_config.json")
+MODEL_PATH = os.path.join(BASE_DIR, "lumiere_ncf.h5")
 
 # 1. Load file konfigurasi mapping index
 try:
-    with open("app/model_config.json", "r") as f:
+    with open(CONFIG_PATH, "r") as f:
         model_config = json.load(f)
 except Exception as e:
-    # Fallback jika posisi folder saat deploy terbaca sebagai root lokal
-    with open("model_config.json", "r") as f:
-        model_config = json.load(f)
+    raise RuntimeError(f"Gagal memuat model_config.json di path {CONFIG_PATH}. Error: {str(e)}")
 
 USER_TO_INDEX = model_config["user_to_index"]
 INDEX_TO_MOVIE = model_config["index_to_movie"]
@@ -23,62 +23,37 @@ ALL_MOVIE_INDICES = list(map(int, INDEX_TO_MOVIE.keys()))
 
 # 2. Load bobot model .h5 murni
 try:
-    model = tf.keras.models.load_model("app/lumiere_ncf.h5")
+    model = tf.keras.models.load_model(MODEL_PATH)
 except Exception as e:
-    model = tf.keras.models.load_model("lumiere_ncf.h5")
+    raise RuntimeError(f"Gagal memuat lumiere_ncf.h5 di path {MODEL_PATH}. Error: {str(e)}")
 
-# =====================================================================
-# 🚀 INITIALIZATION & ROUTING
-# =====================================================================
-
-app = FastAPI(title=settings.PROJECT_NAME, version="1.0.0")
-
-# Perintah membuat tabel PostgreSQL bawaan Arghi
-models.Base.metadata.create_all(bind=engine)
+# ── INITIALIZATION ───────────────────────────────────────────────────
+app = FastAPI(title="Lumiere AI Engine Testing", version="1.0.0")
 
 @app.get("/")
 def read_root():
     return {
-        "message": f"Welcome to {settings.PROJECT_NAME}",
+        "message": "Welcome to Lumiere AI Engine Deployment Testing",
         "status": "Online",
         "ai_engine": "Neural Collaborative Filtering (NCF) v1 - Active"
     }
 
-# Include router database bawaan Arghi
-app.include_router(movies.router, prefix="/api/v1", tags=["Movies Testing"])
-
-
-# =====================================================================
-# 🎬 NEW ENDPOINT: LIVE AI RECOMMENDATION FOR FRONTEND
-# =====================================================================
 @app.get("/api/v1/recommend/{user_id}")
 def get_ai_recommendations(user_id: str, top_k: int = 10):
-    """
-    Endpoint khusus untuk Herlita & Zaky (Frontend) menembak ID User 
-    dan langsung mendapatkan Top-K rekomendasi film dari model Rajif.
-    """
-    # 1. Validasi apakah User ID terdaftar di dataset latihan
     if user_id not in USER_TO_INDEX:
         raise HTTPException(
             status_code=404, 
-            detail=f"User ID '{user_id}' tidak ditemukan dalam database matriks latihan (Cold Start)."
+            detail=f"User ID '{user_id}' tidak ditemukan dalam database matriks latihan."
         )
     
-    # 2. Ambil indeks internal user
     user_idx = USER_TO_INDEX[user_id]
-    
-    # 3. Siapkan array input untuk TensorFlow (Pasangkan user_idx dengan SEMUA film yang ada)
     num_items = len(ALL_MOVIE_INDICES)
     user_input_array = np.full(shape=(num_items,), fill_value=user_idx, dtype=np.int32)
     movie_input_array = np.array(ALL_MOVIE_INDICES, dtype=np.int32)
     
-    # 4. Jalankan Prediksi Inferensi (model.predict)
     predictions = model.predict([user_input_array, movie_input_array], verbose=0).flatten()
-    
-    # 5. Ambil Top-K indeks dengan nilai rating prediksi tertinggi
     top_indices = np.argsort(predictions)[::-1][:top_k]
     
-    # 6. Terjemahkan kembali menjadi struktur JSON yang dimengerti Frontend
     recommendations = []
     for idx in top_indices:
         movie_idx_internal = ALL_MOVIE_INDICES[idx]
@@ -88,7 +63,7 @@ def get_ai_recommendations(user_id: str, top_k: int = 10):
         recommendations.append({
             "movie_id": int(original_movie_id),
             "title": movie_title,
-            "confidence_score": float(predictions[idx]) # Skala 0 - 1 hasil sigmoid
+            "confidence_score": float(predictions[idx])
         })
         
     return {
