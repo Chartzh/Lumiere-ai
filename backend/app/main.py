@@ -32,7 +32,7 @@ models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title=settings.PROJECT_NAME, version="1.0.0", lifespan=lifespan)
 
-# Daftarkan port default SvelteKit lokal agar allow_credentials=True bisa berjalan valid
+# === KONFIGURASI CORS AGAR SVELTEKIT BISA AKSES ===
 origins = [
     "http://localhost",
     "http://localhost:5173",
@@ -41,10 +41,19 @@ origins = [
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,        # Menggunakan list origin spesifik (Aman untuk browser)
-    allow_credentials=True,       # Tetap True untuk handle session/cookies frontend jika ada
-    allow_methods=["*"],          # Mengizinkan semua method (GET, POST, PUT, DELETE)
-    allow_headers=["*"],          # Mengizinkan semua jenis HTTP Headers
+    allow_origins=origins,        
+    allow_credentials=True,       
+    allow_methods=["*"],          
+    allow_headers=["*"],          
 )
 
+# Route modular untuk movies dan engine rekomendasi
 app.include_router(movies.router, prefix="/api/v1", tags=["Movies & Recommendation"])
+
+@app.get("/")
+def read_root():
+    return {
+        "message": "Welcome to Lumiere AI Engine Production API",
+        "status": "Online",
+        "cors_status": "Enabled for SvelteKit Localhost"
+    }
