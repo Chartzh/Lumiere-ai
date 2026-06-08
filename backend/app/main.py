@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware  # <-- Tambahkan ini
+from fastapi.middleware.cors import CORSMiddleware  
 from contextlib import asynccontextmanager
 import tensorflow as tf
 import os
@@ -32,14 +32,19 @@ models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title=settings.PROJECT_NAME, version="1.0.0", lifespan=lifespan)
 
-# TUGAS MEDIUM 2: Konfigurasi CORS agar bisa diakses dari frontend SvelteKit
-# Di fase produksi, lo bisa mengganti "*" dengan URL hosting murni SvelteKit milik tim lo
+# Daftarkan port default SvelteKit lokal agar allow_credentials=True bisa berjalan valid
+origins = [
+    "http://localhost",
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Mengizinkan semua origin akses (aman untuk fase development)
-    allow_credentials=True,
-    allow_methods=["*"],  # Mengizinkan semua method (GET, POST, PUT, DELETE)
-    allow_headers=["*"],  # Mengizinkan semua jenis HTTP Headers
+    allow_origins=origins,        # Menggunakan list origin spesifik (Aman untuk browser)
+    allow_credentials=True,       # Tetap True untuk handle session/cookies frontend jika ada
+    allow_methods=["*"],          # Mengizinkan semua method (GET, POST, PUT, DELETE)
+    allow_headers=["*"],          # Mengizinkan semua jenis HTTP Headers
 )
 
 app.include_router(movies.router, prefix="/api/v1", tags=["Movies & Recommendation"])
