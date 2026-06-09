@@ -1,9 +1,18 @@
 import requests
 import time  # Ditambahkan untuk menghitung waktu kedaluwarsa cache
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 import numpy as np
+from sqlalchemy.orm import Session
+
 from app.core.config import settings
+from app.db.session import get_db
+from app.db import models
+
+# Import recommender modules
+from app.core.recommender.popularity import get_popularity_recommendations
+from app.core.recommender.content_based import get_content_based_recommendations
+from app.core.recommender.reranking import apply_mmr_reranking
 
 router = APIRouter()
 
@@ -63,63 +72,150 @@ def fetch_tmdb_metadata(movie_id: int):
     return {"title": f"Movie ID {movie_id}", "synopsis": "Gagal memuat detail dari TMDB.", "poster_url": None}
 
 
-# Endpoint POST /recommend
-@router.post("/recommend")
-def get_movie_recommendations(request: RecommendRequest):
+# Core recommendation router logic
+def generate_recommendations(user_id: int, db: Session):
     from app.main import ml_models
     model = ml_models.get("ncf_model")
     
-    # Fallback murni ID TMDB populer jika model TensorFlow gagal/belum siap
-    recommended_movie_ids = [550, 27205, 157336, 680, 155]
+    # Check if NCF model is in mock mode (either loading failed or not ready)
+    is_mock_mode = (model is None) or (isinstance(model, dict) and model.get("status") == "mock_mode")
     
-    # Jika model TensorFlow berhasil dimuat, jalankan prediksi real
-    if model:
-        try:
-            # Menggunakan ID indeks kecil (0-3705) agar sesuai dengan dimensi matriks model embedding Rajif
-            candidate_model_indices = np.array([10, 25, 45, 88, 120, 300, 550, 1000])
-            user_input = np.array([request.user_id] * len(candidate_model_indices))
+    # 1. Determine User State: New or Old, and Onboarding Genres
+    is_new_user = True
+    genres = []
+    
+    try:
+        # Query User Profile from DB
+        user = db.query(models.UserProfile).filter(models.UserProfile.id == user_id).first()
+        if user:
+            # Check user_id_movielens. If present, they are an old/existing user with historical training data
+            if user.user_id_movielens is not None:
+                is_new_user = False
             
-            # Jalankan inference model TensorFlow NCF
-            predictions = model.predict([user_input, candidate_model_indices], verbose=0)
-            
-            # Ambil Top 5 index dengan skor tertinggi
-            top_indices = np.argsort(predictions.flatten())[::-1][:5]
-            selected_model_indices = candidate_model_indices[top_indices].tolist()
-            
-            # Mapping balik dari indeks model internal ke ID TMDB rilisan global
-            # Kita petakan hasil urutan teratas ke film-film ikonik untuk demonstrasi visual
-            id_mapping = {
-                10: 550,     # Fight Club
-                25: 27205,   # Inception
-                45: 157336,  # Interstellar
-                88: 680,     # Pulp Fiction
-                120: 155,    # The Dark Knight
-                300: 299534, # Avengers: Endgame
-                550: 19995,  # Avatar
-                1000: 24428  # The Avengers
-            }
-            
-            recommended_movie_ids = [id_mapping.get(idx, 550) for idx in selected_model_indices]
-            print("=== [SUCCESS] Inference Model TensorFlow NCF Berhasil Tanpa Error! ===")
-            
-        except Exception as e:
-            print(f"Error saat inference model: {str(e)}")
-            pass
+            # Fetch onboarding preferences
+            pref = db.query(models.OnboardingPreference).filter(models.OnboardingPreference.user_id == user.id).first()
+            if pref and pref.preferred_genres:
+                genres = [g.strip() for g in pref.preferred_genres.split(",") if g.strip()]
+        else:
+            # User profile not found in database, classify as new user
+            is_new_user = True
+            genres = []
+    except Exception as e:
+        print(f"=== [DB CONNECTION ERROR] Fallback to Mock User State: {str(e)} ===")
+        # DB is offline or port problem: apply deterministic fallbacks based on user_id
+        # user_id == 1: Old user (test NCF + MMR)
+        # user_id == 2: New user with onboarding genres (test Content-based)
+        # user_id >= 3: New user who skipped onboarding (test Popularity)
+        if user_id == 1:
+            is_new_user = False
+            genres = []
+        elif user_id == 2:
+            is_new_user = True
+            genres = ["Action", "Sci-Fi", "Adventure"]
+        else:
+            is_new_user = True
+            genres = []
 
-    # Kombinasikan ID rekomendasi dengan metadata visual TMDB (Mendukung Caching)
+    # 2. Recommendation Routing Logic
+    recommendations = []
+    
+    if is_new_user:
+        if not genres:
+            # New user, skipped onboarding -> Popularity recommendations
+            print("=== [ROUTING] New User (No Onboarding Genres) -> Popularity Recommender ===")
+            recommendations = get_popularity_recommendations(top_k=5)
+        else:
+            # New user, completed onboarding -> Content-Based recommendations
+            print(f"=== [ROUTING] New User (Genres: {genres}) -> Content-Based Recommender ===")
+            recommendations = get_content_based_recommendations(user_genres=genres, top_k=5)
+    else:
+        # Old user -> NCF Model recommendations
+        print(f"=== [ROUTING] Old User (ID: {user_id}) -> NCF Recommender ===")
+        if is_mock_mode:
+            print("=== [ROUTING FAILSAFE] NCF Model is in Mock Mode. Falling back to Content-Based or Popularity ===")
+            if genres:
+                recommendations = get_content_based_recommendations(user_genres=genres, top_k=5)
+            else:
+                recommendations = get_popularity_recommendations(top_k=5)
+        else:
+            try:
+                # Run real NCF model inference
+                candidate_model_indices = np.array([10, 25, 45, 88, 120, 300, 550, 1000])
+                user_input = np.array([user_id] * len(candidate_model_indices))
+                predictions = model.predict([user_input, candidate_model_indices], verbose=0)
+                
+                # Format candidate list for MMR
+                id_mapping = {
+                    10: 550,     # Fight Club
+                    25: 27205,   # Inception
+                    45: 157336,  # Interstellar
+                    88: 680,     # Pulp Fiction
+                    120: 155,    # The Dark Knight
+                    300: 299534, # Avengers: Endgame
+                    550: 19995,  # Avatar
+                    1000: 24428  # The Avengers
+                }
+                title_mapping = {
+                    550: "Fight Club",
+                    27205: "Inception",
+                    157336: "Interstellar",
+                    680: "Pulp Fiction",
+                    155: "The Dark Knight",
+                    299534: "Avengers: Endgame",
+                    19995: "Avatar",
+                    24428: "The Avengers"
+                }
+                
+                raw_ncf_candidates = []
+                scores = predictions.flatten()
+                for idx, model_idx in enumerate(candidate_model_indices):
+                    movie_id = id_mapping.get(model_idx)
+                    if movie_id:
+                        raw_ncf_candidates.append({
+                            "movie_id": movie_id,
+                            "score": float(scores[idx]),
+                            "title": title_mapping.get(movie_id, f"Movie ID {movie_id}")
+                        })
+                
+                # Filter candidates using MMR reranking
+                print("=== [MMR RERANKING] Applying MMR Reranking on NCF Candidates ===")
+                recommendations = apply_mmr_reranking(raw_ncf_candidates, top_k=5, diversity_factor=0.5)
+                print("=== [SUCCESS] Inference Model TensorFlow NCF + MMR Berhasil! ===")
+            except Exception as e:
+                print(f"=== [NCF INFERENCE ERROR] Fallback to Popularity: {str(e)} ===")
+                recommendations = get_popularity_recommendations(top_k=5)
+
+    # 3. Combine recommendation items with TMDB metadata
     final_recommendations = []
-    for rank, movie_id in enumerate(recommended_movie_ids, start=1):
+    for rank, rec in enumerate(recommendations, start=1):
+        movie_id = rec["movie_id"]
+        # Fetch TMDB metadata (synopsis, poster, etc.)
         metadata = fetch_tmdb_metadata(movie_id)
+        
         final_recommendations.append({
             "rank": rank,
             "movie_id": movie_id,
-            "title": metadata["title"],
-            "synopsis": metadata["synopsis"],
-            "poster_url": metadata["poster_url"]
+            "title": metadata.get("title", rec.get("title")),
+            "synopsis": metadata.get("synopsis", "Detail film tidak tersedia."),
+            "poster_url": metadata.get("poster_url"),
+            "xai_reason": rec["xai_reason"]
         })
         
     return {
         "status": "Success",
-        "requested_user_id": request.user_id,
+        "requested_user_id": user_id,
+        "user_type": "New User" if is_new_user else "Old User",
+        "mock_mode_active": is_mock_mode,
         "recommendations": final_recommendations
     }
+
+
+# Rerouted endpoints to support both GET /recommend/{user_id} and POST /recommend
+@router.get("/recommend/{user_id}")
+def get_recommendations_get(user_id: int, db: Session = Depends(get_db)):
+    return generate_recommendations(user_id, db)
+
+
+@router.post("/recommend")
+def get_recommendations_post(request: RecommendRequest, db: Session = Depends(get_db)):
+    return generate_recommendations(request.user_id, db)
