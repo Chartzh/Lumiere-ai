@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 <script>
   import MovieCard       from '$lib/components/MovieCard.svelte';
   import GenreFilter     from '$lib/components/GenreFilter.svelte';
@@ -591,7 +590,3 @@
   .results-header { flex-direction: column; align-items: flex-start; }
 }
 </style>
-=======
-<h1>Welcome to SvelteKit</h1>
-<p>Visit <a href="https://svelte.dev/docs/kit">svelte.dev/docs/kit</a> to read the documentation</p>
->>>>>>> 0d15c6f9ad05a9a3286e42cf539958efa22b677b
