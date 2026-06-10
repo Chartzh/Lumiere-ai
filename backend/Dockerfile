@@ -1,4 +1,4 @@
-FROM python:3.11-slim
+FROM python:3.10-slim
 
 # Atur lingkungan kerja langsung di root container agar struktur modul folder 'app' terjaga
 WORKDIR /app
