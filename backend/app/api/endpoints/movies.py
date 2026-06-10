@@ -1,3 +1,5 @@
+import os
+import tensorflow as tf
 import requests
 import time  # Ditambahkan untuk menghitung waktu kedaluwarsa cache
 from fastapi import APIRouter, HTTPException, Depends
@@ -79,6 +81,34 @@ def generate_recommendations(user_id: int, db: Session):
     
     # Check if NCF model is in mock mode (either loading failed or not ready)
     is_mock_mode = (model is None) or (isinstance(model, dict) and model.get("status") == "mock_mode")
+    
+    if is_mock_mode:
+        print("=== [LATE INITIALIZATION] NCF Model is in Mock Mode. Attempting live initialization... ===")
+        url = "https://ccodbglbolcxaohndouu.supabase.co/storage/v1/object/public/models/lumiere_ncf.h5"
+        dest_path = "/tmp/lumiere_ncf.h5"
+        try:
+            if not os.path.exists(dest_path):
+                print(f"=== [LATE INITIALIZATION] Downloading model from {url}... ===")
+                response = requests.get(url, stream=True, timeout=60)
+                if response.status_code == 200:
+                    os.makedirs(os.path.dirname(dest_path), exist_ok=True)
+                    with open(dest_path, "wb") as f:
+                        for chunk in response.iter_content(chunk_size=8192):
+                            if chunk:
+                                f.write(chunk)
+                    print(f"=== [LATE INITIALIZATION] Download complete: {dest_path} ===")
+                else:
+                    raise Exception(f"Download HTTP status: {response.status_code}")
+            else:
+                print(f"=== [LATE INITIALIZATION] Model already exists at {dest_path} ===")
+            
+            print("=== [LATE INITIALIZATION] Loading Keras model... ===")
+            model = tf.keras.models.load_model(dest_path)
+            ml_models["ncf_model"] = model
+            is_mock_mode = False
+            print("=== [LATE INITIALIZATION SUCCESS] TensorFlow NCF model initialized and cached! ===")
+        except Exception as e:
+            print(f"=== [LATE INITIALIZATION FAILED] Live initialization failed: {str(e)} ===")
     
     # 1. Determine User State: New or Old, and Onboarding Genres
     is_new_user = True
