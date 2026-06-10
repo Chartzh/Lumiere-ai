@@ -8,3 +8,4 @@ sqlalchemy
 tensorflow-cpu
 pandas
 numpy
+scikit-learn
