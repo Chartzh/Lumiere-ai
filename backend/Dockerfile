@@ -5,6 +5,7 @@ WORKDIR /app
 
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
+ENV TF_USE_LEGACY_KERAS=1
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
