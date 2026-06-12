@@ -2,10 +2,12 @@ fastapi
 uvicorn
 python-dotenv
 pydantic
+pydantic-settings
 requests
 psycopg2-binary
 sqlalchemy
 pandas
 scikit-learn
 tensorflow-cpu==2.15.0
+keras==2.15.0
 numpy==1.26.4

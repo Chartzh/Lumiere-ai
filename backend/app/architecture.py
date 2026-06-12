@@ -1,84 +1,67 @@
-# app/utils/architecture.py
-# Lumiere AI, diverifikasi langsung dari model_config di lumiere_ncf.h5
-# + notebook Lumiere_NCF.ipynb.
-#
-# Tujuan: memuat model lewat build + load_weights, sehingga TIDAK ada
-# deserialisasi arsitektur (InputLayer). Error
-#   "deserializing class 'InputLayer' ... 'batch_shape'"
-# menjadi MUSTAHIL, baik di TF 2.15 maupun TF 2.16+ / Keras 3.
-
+"""
+Rekonstruksi arsitektur NeuMF untuk Lumiere AI.
+File .h5 disimpan oleh Keras 3; di Cloud Run kita pakai Keras 2.15 yang tidak
+bisa men-deserialisasi InputLayer Keras 3. Solusi: bangun ulang arsitektur lalu
+HANYA muat bobotnya (load_weights) -> kebal beda versi Keras.
+PENTING: nama layer & dimensi harus sama persis dengan saat training.
+"""
 import numpy as np
-from tensorflow.keras.layers import (
-    Input, Embedding, Multiply, Concatenate, Dense, Flatten, Dropout,
-)
+import tensorflow as tf
 from tensorflow.keras.models import Model
+from tensorflow.keras.layers import (
+    Input, Embedding, Flatten, Multiply, Concatenate, Dense, Dropout,
+)
 from tensorflow.keras.regularizers import l2
 
-# Konstanta hasil bongkar file .h5 (JANGAN diubah kecuali retrain):
-NUM_USERS = 6040       # input_dim gmf/mlp_user_embedding
-NUM_MOVIES = 3706      # input_dim gmf/mlp_movie_embedding
+NUM_USERS = 6040
+NUM_MOVIES = 3706
 EMBEDDING_SIZE = 32
 L2_REG = 1e-4
 
-
-def build_ncf_model(
-    num_users: int = NUM_USERS,
-    num_movies: int = NUM_MOVIES,
-    embedding_size: int = EMBEDDING_SIZE,
-    l2_reg: float = L2_REG,
-) -> Model:
-    """Bangun ulang arsitektur identik dengan saat training (nama layer sama)."""
+def build_ncf_model() -> tf.keras.Model:
     user_input = Input(shape=(1,), name="user_input")
     movie_input = Input(shape=(1,), name="movie_input")
 
-    # GMF path
-    user_embed_gmf = Embedding(
-        num_users, embedding_size,
-        embeddings_regularizer=l2(l2_reg), name="gmf_user_embedding",
-    )(user_input)
-    movie_embed_gmf = Embedding(
-        num_movies, embedding_size,
-        embeddings_regularizer=l2(l2_reg), name="gmf_movie_embedding",
-    )(movie_input)
-    gmf_vector = Multiply(name="gmf_product")(
-        [Flatten()(user_embed_gmf), Flatten()(movie_embed_gmf)]
-    )
+    # --- GMF branch ---
+    gmf_user = Embedding(NUM_USERS, EMBEDDING_SIZE,
+                         embeddings_regularizer=l2(L2_REG),
+                         name="gmf_user_embedding")(user_input)
+    gmf_user = Flatten()(gmf_user)
+    gmf_movie = Embedding(NUM_MOVIES, EMBEDDING_SIZE,
+                          embeddings_regularizer=l2(L2_REG),
+                          name="gmf_movie_embedding")(movie_input)
+    gmf_movie = Flatten()(gmf_movie)
+    gmf_product = Multiply(name="gmf_product")([gmf_user, gmf_movie])
 
-    # MLP path
-    user_embed_mlp = Embedding(
-        num_users, embedding_size,
-        embeddings_regularizer=l2(l2_reg), name="mlp_user_embedding",
-    )(user_input)
-    movie_embed_mlp = Embedding(
-        num_movies, embedding_size,
-        embeddings_regularizer=l2(l2_reg), name="mlp_movie_embedding",
-    )(movie_input)
-    mlp_vector = Concatenate(name="mlp_concat")(
-        [Flatten()(user_embed_mlp), Flatten()(movie_embed_mlp)]
-    )
-    mlp_layer = Dense(64, activation="relu", name="mlp_dense_1")(mlp_vector)
-    mlp_layer = Dropout(0.3, name="mlp_dropout_1")(mlp_layer)
-    mlp_layer = Dense(32, activation="relu", name="mlp_dense_2")(mlp_layer)
-    mlp_layer = Dropout(0.2, name="mlp_dropout_2")(mlp_layer)
+    # --- MLP branch ---
+    mlp_user = Embedding(NUM_USERS, EMBEDDING_SIZE,
+                         embeddings_regularizer=l2(L2_REG),
+                         name="mlp_user_embedding")(user_input)
+    mlp_user = Flatten()(mlp_user)
+    mlp_movie = Embedding(NUM_MOVIES, EMBEDDING_SIZE,
+                          embeddings_regularizer=l2(L2_REG),
+                          name="mlp_movie_embedding")(movie_input)
+    mlp_movie = Flatten()(mlp_movie)
+    mlp_vector = Concatenate(name="mlp_concat")([mlp_user, mlp_movie])
+    mlp_vector = Dense(64, activation="relu", name="mlp_dense_1")(mlp_vector)
+    mlp_vector = Dropout(0.3, name="mlp_dropout_1")(mlp_vector)
+    mlp_vector = Dense(32, activation="relu", name="mlp_dense_2")(mlp_vector)
+    mlp_vector = Dropout(0.2, name="mlp_dropout_2")(mlp_vector)
 
-    # Fusion & Output
-    predict_vector = Concatenate(name="fusion")([gmf_vector, mlp_layer])
-    output_layer = Dense(1, activation="sigmoid", name="output")(predict_vector)
+    # --- Fusion + output ---
+    fusion = Concatenate(name="fusion")([gmf_product, mlp_vector])
+    output = Dense(1, activation="sigmoid", name="output")(fusion)
 
-    return Model(inputs=[user_input, movie_input], outputs=output_layer, name="NeuMF")
+    return Model(inputs=[user_input, movie_input], outputs=output, name="NeuMF")
 
-
-def load_ncf_model(dest_path: str) -> Model:
-    """
-    Muat HANYA bobot dari file .h5 ke arsitektur yang dibangun ulang.
-    File sudah di-download oleh pemanggil (lifespan / late-init).
-
-    by_name=True  -> cocokkan bobot Embedding/Dense berdasar nama layer,
-                     tahan beda format Keras 2 (TF 2.15) vs Keras 3.
-    skip_mismatch=False -> gagal eksplisit bila arsitektur tak cocok.
-    """
+def load_ncf_model(weights_path: str) -> tf.keras.Model:
     model = build_ncf_model()
-    model.load_weights(dest_path, by_name=True, skip_mismatch=False)
-    # Warm-up agar predict pertama tidak lambat saat request.
-    model.predict([np.array([[0]]), np.array([[0]])], verbose=0)
+    try:
+        model.load_weights(weights_path)  # topological (arsitektur identik)
+        print("=== [LOADER] Bobot dimuat via topological load. ===")
+    except Exception as e_topo:
+        print(f"=== [LOADER] Topological gagal ({e_topo}); fallback by_name... ===")
+        model.load_weights(weights_path, by_name=True, skip_mismatch=True)
+        print("=== [LOADER] Bobot dimuat via by_name load. ===")
+    _ = model.predict([np.array([0]), np.array([0])], verbose=0)  # warm-up
     return model

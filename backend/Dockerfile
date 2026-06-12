@@ -1,11 +1,9 @@
 FROM python:3.10-slim
 
-# Atur lingkungan kerja langsung di root container agar struktur modul folder 'app' terjaga
 WORKDIR /app
 
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
-ENV TF_USE_LEGACY_KERAS=1
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
@@ -14,8 +12,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Menyalin folder app beserta seluruh isinya ke direktori /app/
 COPY . .
 
-# Jalankan uvicorn dengan memanggil modul app.main:app
 CMD uvicorn app.main:app --host 0.0.0.0 --port $PORT
