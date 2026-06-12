@@ -5,7 +5,7 @@ import os
 import requests
 
 from app.core.config import settings
-from app.api.endpoints import movies, onboarding, auth, profile, mood
+from app.api.endpoints import movies, onboarding, auth, profile, mood, interactions
 from app.core.recommender import catalog
 from app.architecture import load_ncf_model
 from app.db.session import engine, Base
@@ -75,6 +75,7 @@ app.include_router(onboarding.router, prefix="/api/v1", tags=["Onboarding"])
 app.include_router(auth.router, prefix="/api/v1", tags=["Auth"])
 app.include_router(profile.router, prefix="/api/v1", tags=["Taste Profile"])
 app.include_router(mood.router, prefix="/api/v1", tags=["Mood"])
+app.include_router(interactions.router, prefix="/api/v1", tags=["Interactions"])
 
 
 @app.get("/")

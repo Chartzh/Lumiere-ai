@@ -16,7 +16,10 @@ _ALTERS = [
     "ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS display_name VARCHAR(100)",
     "ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS taste_summary TEXT",
     "ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS taste_updated_at TIMESTAMP",
+    "ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS password_hash VARCHAR(255)",
+    "ALTER TABLE onboarding_preferences ADD COLUMN IF NOT EXISTS preferred_movie_ids TEXT",
     "ALTER TABLE onboarding_preferences ADD COLUMN IF NOT EXISTS mood VARCHAR(50)",
+    "ALTER TABLE onboarding_preferences ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW()",
     "CREATE UNIQUE INDEX IF NOT EXISTS ix_user_profiles_email ON user_profiles (email)",
 ]
 

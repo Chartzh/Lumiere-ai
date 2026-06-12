@@ -36,12 +36,14 @@ class UserProfile(Base):
     # --- Auth (email dummy) ---
     email = Column(String(255), unique=True, nullable=True, index=True)
     display_name = Column(String(100), nullable=True)
+    password_hash = Column(String(255), nullable=True)   # opsional: auth berpassword (pbkdf2). Kosong = login email-saja.
     # --- Ringkasan selera (cache JSON) ---
     taste_summary = Column(Text, nullable=True)        # JSON string ringkasan selera
     taste_updated_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     preferences = relationship("OnboardingPreference", back_populates="user", cascade="all, delete-orphan")
     taste_snapshots = relationship("TasteSnapshot", back_populates="user", cascade="all, delete-orphan")
+    interactions = relationship("UserInteraction", back_populates="user", cascade="all, delete-orphan")
 
 
 class OnboardingPreference(Base):
@@ -71,3 +73,26 @@ class TasteSnapshot(Base):
     dominant_genres = Column(Text, nullable=True)         # "Action, Sci-Fi, Drama"
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
     user = relationship("UserProfile", back_populates="taste_snapshots")
+
+
+class UserInteraction(Base):
+    """Interaksi pengguna dengan film: favorite / rating / review.
+
+    Sinyal ini dipakai untuk MEMPERBARUI rekomendasi & profil selera:
+      - favorite atau rating >= 4 -> film jadi seed tambahan content-based
+        (rekomendasi berikutnya bergeser mengikuti selera terbaru),
+      - tiap interaksi memicu recompute profil selera + snapshot evolusi.
+
+    Catatan jujur: model NCF pra-latih TIDAK dilatih ulang real-time tiap
+    interaksi; pembaruan via content-based boosting + pengayaan profil selera.
+    """
+    __tablename__ = "user_interactions"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("user_profiles.id", ondelete="CASCADE"), nullable=False, index=True)
+    movie_id = Column(Integer, nullable=False, index=True)
+    interaction_type = Column(String(20), nullable=False)   # "favorite" | "rating" | "review"
+    rating = Column(Integer, nullable=True)                 # 1..5 (untuk rating/review)
+    review = Column(Text, nullable=True)                    # teks review (opsional)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    user = relationship("UserProfile", back_populates="interactions")

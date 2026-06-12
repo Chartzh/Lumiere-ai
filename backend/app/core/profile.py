@@ -37,6 +37,24 @@ def _load_onboarding(db, user):
     return genres, seed_ids, mood, pref
 
 
+def _load_liked_interactions(db, user):
+    """movie_id yang disukai (favorite / rating>=4) dari interaksi user."""
+    try:
+        rows = (
+            db.query(models.UserInteraction)
+            .filter(models.UserInteraction.user_id == user.id)
+            .all()
+        )
+    except Exception as e:
+        print("=== [TASTE] gagal baca interaksi: " + str(e) + " ===")
+        return []
+    liked = []
+    for r in rows:
+        if r.interaction_type == "favorite" or ((r.rating or 0) >= 4):
+            liked.append(r.movie_id)
+    return list(dict.fromkeys(liked))
+
+
 def _confidence(genre_count, seed_count):
     """Skor keyakinan profil 0..100 dari banyaknya sinyal yang dimiliki user."""
     score = min(100, genre_count * 12 + seed_count * 10)
@@ -75,6 +93,8 @@ def _favorite_credits(seed_movies, top_n=3):
 def compute_taste_profile(db, user, include_credits=False):
     """Hitung ringkasan selera secara on-the-fly dari history onboarding."""
     genres, seed_ids, mood, pref = _load_onboarding(db, user)
+    liked_ids = _load_liked_interactions(db, user)
+    all_seed_ids = list(dict.fromkeys(list(seed_ids) + liked_ids))
 
     genre_counter = Counter()
     for g in genres:
@@ -82,7 +102,7 @@ def compute_taste_profile(db, user, include_credits=False):
 
     decade_counter = Counter()
     seed_movies = []
-    for mid in seed_ids:
+    for mid in all_seed_ids:
         m = get_movie(mid)
         if not m:
             continue
@@ -114,6 +134,7 @@ def compute_taste_profile(db, user, include_credits=False):
             "distinct_genres": len([g for g in genre_counter if genre_counter[g] > 0]),
             "onboarding_genre_count": len(genres),
             "seed_movie_count": len(seed_movies),
+            "interaction_liked_count": len(liked_ids),
         },
         "confidence": _confidence(len(genres), len(seed_movies)),
         "computed_at": datetime.utcnow().isoformat() + "Z",

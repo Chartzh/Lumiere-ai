@@ -4,7 +4,7 @@ import time
 import requests
 import numpy as np
 from concurrent.futures import ThreadPoolExecutor
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -17,6 +17,7 @@ from app.core.recommender.content_based import get_content_based_recommendations
 from app.core.recommender.reranking import apply_mmr_reranking
 from app.core.recommender.genre_based import get_genre_recommendations
 from app.core.recommender.exploration import get_serendipity_recommendations
+from app.core.tmdb import fetch_tmdb_credits
 from app.architecture import load_ncf_model
 
 router = APIRouter()
@@ -44,10 +45,16 @@ def _load_model_config():
     global _CONFIG
     if _CONFIG is not None:
         return _CONFIG
+    # __file__ = .../backend/app/api/endpoints/movies.py
+    _endpoints_dir = os.path.dirname(os.path.abspath(__file__))
+    _app_dir = os.path.dirname(os.path.dirname(_endpoints_dir))       # .../backend/app
+    _backend_dir = os.path.dirname(_app_dir)                          # .../backend
     candidates = [
-        "model_config.json",
-        "/app/model_config.json",
-        os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))), "model_config.json"),
+        os.path.join(_app_dir, "model_config.json"),                 # lokasi sebenarnya (app/)
+        os.path.join(_backend_dir, "model_config.json"),             # cadangan (backend/)
+        "/app/model_config.json",                                    # path di dalam container Docker
+        "app/model_config.json",                                     # relatif cwd = backend/
+        "model_config.json",                                         # relatif cwd = app/
     ]
     for path in candidates:
         if os.path.exists(path):
@@ -69,6 +76,22 @@ def resolve_demo_user_state(user_id):
         return True, []                                 # New User skip onboarding -> Popularity
 
 
+def _liked_movie_ids(db, user_db_id):
+    """movie_id yang disukai user (favorite atau rating>=4) dari interaksi."""
+    try:
+        rows = db.query(models.UserInteraction).filter(
+            models.UserInteraction.user_id == user_db_id
+        ).all()
+    except Exception as e:
+        print("=== [INTERACTION] gagal baca interaksi: " + str(e) + " ===")
+        return []
+    liked = []
+    for r in rows:
+        if r.interaction_type == "favorite" or ((r.rating or 0) >= 4):
+            liked.append(r.movie_id)
+    return list(dict.fromkeys(liked))
+
+
 def _determine_user_state(user_id, db):
     is_new_user = True
     genres = []
@@ -86,6 +109,10 @@ def _determine_user_state(user_id, db):
                     genres = [g.strip() for g in pref.preferred_genres.split(",") if g.strip()]
                 if getattr(pref, "preferred_movie_ids", None):
                     seed_movie_ids = [int(x) for x in pref.preferred_movie_ids.split(",") if x.strip().isdigit()]
+            # Sinyal interaksi (favorite / rating tinggi) -> seed tambahan content-based.
+            for mid in _liked_movie_ids(db, user.id):
+                if mid not in seed_movie_ids:
+                    seed_movie_ids.append(mid)
         else:
             is_new_user, genres = resolve_demo_user_state(user_id)
     except Exception as e:
@@ -328,6 +355,37 @@ def recommend_serendipity(user_id: int, top_k: int = 10, db: Session = Depends(g
         "engine": "Exploration",
         "recommendations": _enrich(recs),
     }
+
+
+@router.get("/movie/{movie_id}")
+def movie_detail(movie_id: int, include_credits: bool = True):
+    """Detail satu film: poster + sinopsis + (opsional) sutradara & cast utama.
+
+    Dipakai saat user mengklik/membuka satu film. Kartu For You sengaja tetap
+    ringan (tanpa credits) agar cepat & hemat kuota TMDB; credits hanya di sini.
+    """
+    movie = get_movie(movie_id)
+    if not movie:
+        raise HTTPException(status_code=404, detail="Film tidak ditemukan di katalog.")
+
+    meta = fetch_tmdb_metadata(movie_id, movie["title"], movie.get("year"))
+    detail = {
+        "movie_id": movie_id,
+        "title": meta.get("title") or movie["title"],
+        "year": movie.get("year"),
+        "genres": movie.get("genres", []),
+        "synopsis": meta.get("synopsis", "Detail film tidak tersedia."),
+        "poster_url": meta.get("poster_url"),
+        "rating_count": movie.get("rating_count"),
+        "avg_rating": movie.get("avg_rating"),
+        "directors": [],
+        "cast": [],
+    }
+    if include_credits:
+        credits = fetch_tmdb_credits(movie_id, movie["title"], movie.get("year"))
+        detail["directors"] = credits.get("directors", [])
+        detail["cast"] = credits.get("cast", [])
+    return {"status": "Success", "movie": detail}
 
 
 @router.post("/recommend")
