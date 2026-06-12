@@ -5,9 +5,12 @@ import os
 import requests
 
 from app.core.config import settings
-from app.api.endpoints import movies, onboarding
+from app.api.endpoints import movies, onboarding, auth, profile, mood
 from app.core.recommender import catalog
 from app.architecture import load_ncf_model
+from app.db.session import engine, Base
+from app.db import models  # noqa: F401  (register tabel utk create_all)
+from app.db.migrations import ensure_schema
 
 ml_models = {}
 
@@ -28,6 +31,14 @@ def download_model(url: str, dest_path: str):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # 0. Pastikan skema DB siap (tabel baru + kolom baru). Aman bila DB down.
+    print("=== [STARTUP] Menyiapkan skema database... ===")
+    try:
+        Base.metadata.create_all(bind=engine)
+        ensure_schema(engine)
+    except Exception as e:
+        print("=== [STARTUP] Lewati setup skema (DB tidak terjangkau): " + str(e) + " ===")
+
     # 1. Muat katalog film dari Supabase ke memori (pengganti DUMMY_MOVIES)
     print("=== [STARTUP] Memuat katalog film dari Supabase... ===")
     catalog.warm_cache()
@@ -61,6 +72,9 @@ app.add_middleware(
 
 app.include_router(movies.router, prefix="/api/v1", tags=["Movies & Recommendation"])
 app.include_router(onboarding.router, prefix="/api/v1", tags=["Onboarding"])
+app.include_router(auth.router, prefix="/api/v1", tags=["Auth"])
+app.include_router(profile.router, prefix="/api/v1", tags=["Taste Profile"])
+app.include_router(mood.router, prefix="/api/v1", tags=["Mood"])
 
 
 @app.get("/")
