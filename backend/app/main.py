@@ -1,15 +1,18 @@
 from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware  
+from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
-import tensorflow as tf
 import os
 import requests
+
 from app.core.config import settings
 from app.api.endpoints import movies
 from app.db.session import engine
 from app.db import models
+# >>> FIX A: pakai loader rebuild+load_weights, bukan tf.keras.models.load_model
+from app.architecture import load_ncf_model
 
 ml_models = {}
+
 
 def download_model(url: str, dest_path: str):
     print(f"=== [STARTUP] Downloading NCF Model from {url}... ===")
@@ -24,6 +27,7 @@ def download_model(url: str, dest_path: str):
     else:
         raise Exception(f"Failed to download model, HTTP status: {response.status_code}")
 
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     print("=== [STARTUP] Loading TensorFlow Model... ===")
@@ -31,7 +35,8 @@ async def lifespan(app: FastAPI):
     dest_path = "/tmp/lumiere_ncf.h5"
     try:
         download_model(url, dest_path)
-        ml_models["ncf_model"] = tf.keras.models.load_model(dest_path)
+        # >>> FIX A: build arsitektur + load_weights (anti error InputLayer/batch_shape)
+        ml_models["ncf_model"] = load_ncf_model(dest_path)
         print("=== [STARTUP] Model 'lumiere_ncf.h5' Loaded Successfully from /tmp! ===")
     except Exception as e:
         print(f"=== [STARTUP] Gagal mengunduh atau memuat model: {str(e)} ===")
@@ -41,6 +46,7 @@ async def lifespan(app: FastAPI):
     print("=== [SHUTDOWN] Cleaning up resources... ===")
     ml_models.clear()
 
+
 app = FastAPI(title=settings.PROJECT_NAME, version="1.0.0", lifespan=lifespan)
 
 # === KONFIGURASI CORS AGAR SVELTEKIT BISA AKSES ===
@@ -49,22 +55,22 @@ origins = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
 ]
-
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],        
-    allow_credentials=False,       
-    allow_methods=["*"],          
-    allow_headers=["*"],          
+    allow_origins=["*"],
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # Route modular untuk movies dan engine rekomendasi
 app.include_router(movies.router, prefix="/api/v1", tags=["Movies & Recommendation"])
+
 
 @app.get("/")
 def read_root():
     return {
         "message": "Welcome to Lumiere AI Engine Production API",
         "status": "Online",
-        "cors_status": "Enabled for SvelteKit Localhost"
+        "cors_status": "Enabled for SvelteKit Localhost",
     }
