@@ -1,22 +1,26 @@
-from app.core.recommender.dummy_data import DUMMY_MOVIES
+from app.core.recommender.catalog import get_catalog
+
 
 def get_popularity_recommendations(top_k: int):
     """
-    Returns a list of the most popular movies from the dummy dataset,
-    accompanied by Explainable AI (XAI) justifications.
+    Film terpopuler berdasarkan JUMLAH RATING nyata (ratings.dat), terurut dari
+    katalog. similarity_percentage memakai rata-rata rating nyata (metrik asli),
+    bukan konstanta.
     """
-    # Simply slice the top_k movies from our list to simulate popularity ranking
-    selected_movies = DUMMY_MOVIES[:top_k]
-    
+    catalog = get_catalog()
+    selected = catalog[:top_k]  # katalog sudah terurut rating_count DESC
+
     recommendations = []
-    for movie in selected_movies:
+    for movie in selected:
+        avg = movie.get("avg_rating", 0.0) or 0.0
         recommendations.append({
             "movie_id": movie["movie_id"],
             "title": movie["title"],
             "xai_reason": {
                 "primary_factor": "Popularity",
-                "matched_features": movie["genres"][:2],  # Highlight typical genres for the movie
-                "similarity_percentage": 95  # Simulated global popularity match score
-            }
+                "matched_features": movie["genres"][:2],
+                "similarity_percentage": min(99, int(avg / 5.0 * 100)),
+                "rating_count": movie.get("rating_count", 0),
+            },
         })
     return recommendations
