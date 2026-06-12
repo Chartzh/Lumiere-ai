@@ -3,6 +3,7 @@ import json
 import time
 import requests
 import numpy as np
+from concurrent.futures import ThreadPoolExecutor
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -231,21 +232,44 @@ def fetch_tmdb_metadata(movie_id, title, year):
 
 
 def _enrich(recommendations):
-    final = []
+    # 1) Siapkan metadata dasar dari katalog (tanpa TMDB).
+    prepared = []
     for rank, rec in enumerate(recommendations, start=1):
         movie_id = rec["movie_id"]
         movie = get_movie(movie_id)
         title = (movie["title"] if movie else None) or rec.get("title")
         year = movie["year"] if movie else None
-        meta = fetch_tmdb_metadata(movie_id, title, year)
-        final.append({
+        prepared.append({
             "rank": rank,
+            "rec": rec,
             "movie_id": movie_id,
-            "title": meta.get("title") or title,
+            "title": title,
             "year": year,
+        })
+
+    # 2) Ambil metadata TMDB (poster + sinopsis) secara PARALEL.
+    #    10 panggilan sekuensial -> ~1 putaran, jadi loading jauh lebih cepat.
+    def _fetch(item):
+        return item["movie_id"], fetch_tmdb_metadata(item["movie_id"], item["title"], item["year"])
+
+    metas = {}
+    if prepared:
+        with ThreadPoolExecutor(max_workers=min(10, len(prepared))) as ex:
+            for movie_id, meta in ex.map(_fetch, prepared):
+                metas[movie_id] = meta
+
+    # 3) Rakit hasil akhir mengikuti urutan ranking semula.
+    final = []
+    for item in prepared:
+        meta = metas.get(item["movie_id"], {})
+        final.append({
+            "rank": item["rank"],
+            "movie_id": item["movie_id"],
+            "title": meta.get("title") or item["title"],
+            "year": item["year"],
             "synopsis": meta.get("synopsis", "Detail film tidak tersedia."),
             "poster_url": meta.get("poster_url"),
-            "xai_reason": rec["xai_reason"],
+            "xai_reason": item["rec"]["xai_reason"],
         })
     return final
 
