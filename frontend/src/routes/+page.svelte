@@ -303,7 +303,7 @@
 			<a
 				href="/"
 				class="brand-name"
-				style="text-decoration: none; font-size: 0.85rem; color: var(--muted);">Beranda</a
+				style="text-decoration: none; font-size: 0.85rem; color: var(--gold);">Beranda</a
 			>
 			<a
 				href="/favorites"
@@ -313,7 +313,7 @@
 			<a
 				href="/profile"
 				class="brand-name"
-				style="text-decoration: none; font-size: 0.85rem; color: var(--gold);">Profil Selera</a
+				style="text-decoration: none; font-size: 0.85rem; color: var(--muted);">Profil Selera</a
 			>
 		</div>
 	</nav>
