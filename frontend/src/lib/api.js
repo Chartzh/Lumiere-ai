@@ -105,8 +105,7 @@ export function fetchRecommendations(payload, token) {
  * @param {{ limit? }} params
  */
 export function fetchPopular(params = {}) {
-  const q = new URLSearchParams(params).toString();
-  return request(`/api/v1/movies/popular${q ? '?' + q : ''}`);
+  return request('/api/v1/recommend/trending');
 }
 
 /**
@@ -114,8 +113,7 @@ export function fetchPopular(params = {}) {
  * @param {{ limit? }} params
  */
 export function fetchTrending(params = {}) {
-  const q = new URLSearchParams(params).toString();
-  return request(`/api/v1/movies/trending${q ? '?' + q : ''}`);
+  return request('/api/v1/recommend/trending');
 }
 
 // ── Event tracking (kebiasaan user) ─────────────────────────────────────────

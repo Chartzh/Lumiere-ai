@@ -95,7 +95,7 @@
 			const data = await request(`/api/v1/recommend/mood/${selectedMood}?top_k=15&user_id=${user.id}`, {
 				token: user.token
 			});
-			moodMovies = Array.isArray(data) ? data : (data.results ?? data.recommendations ?? []);
+			moodMovies = enrichMovies(Array.isArray(data) ? data : (data.recommendations ?? data.results ?? data ?? []));
 		} catch {
 			// Gagal senyap
 		} finally {
@@ -108,7 +108,7 @@
 		loadingPopular = true;
 		try {
 			const data = await fetchPopular({ limit: 10 });
-			popular = data.results ?? [];
+			popular = enrichMovies(data.recommendations ?? data.results ?? data ?? []);
 		} catch {
 			// Gagal senyap — seksi ini tidak kritis
 		} finally {
@@ -121,7 +121,7 @@
 		loadingTrending = true;
 		try {
 			const data = await fetchTrending({ limit: 10 });
-			trending = data.results ?? [];
+			trending = enrichMovies(data.recommendations ?? data.results ?? data ?? []);
 		} catch {
 			// Gagal senyap
 		} finally {
@@ -133,21 +133,25 @@
 	 * Normalisasi response API ke format yang dipakai MovieCard.
 	 */
 	function enrichMovies(raw) {
-		return raw.map((m) => ({
-			...m,
-			genres: Array.isArray(m.genres)
-				? m.genres
-				: (m.genre ?? m.genres ?? '')
-						.split(',')
-						.map((s) => s.trim())
-						.filter(Boolean)
-		}));
+		return raw.map((m) => {
+			const genresSource = m.genres ?? m.genre ?? m.xai_reason?.matched_features ?? [];
+			return {
+				...m,
+				genres: Array.isArray(genresSource)
+					? genresSource
+					: genresSource
+							.toString()
+							.split(',')
+							.map((s) => s.trim())
+							.filter(Boolean)
+			};
+		});
 	}
 
 	// ── Tracking klik (catat kebiasaan user) ──────────────────────────────
 	function handleCardClick(movieId) {
 		if (user?.token) trackClick({ movie_id: movieId }, user.token);
-		// Note: Pemicu modal detail dapat dihubungkan di sini jika komponen modal sudah siap dipanggil
+		goto(`/movie/${movieId}`);
 	}
 
 	// ── Logout ─────────────────────────────────────────────────────────────

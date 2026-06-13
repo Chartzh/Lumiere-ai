@@ -29,11 +29,13 @@
     loading = true;
     try {
       const data = await register({ name: name.trim(), email: email.trim(), password });
+      const nameFallback = data.name || data.username || data.display_name || name.trim() || 
+        (data.email || email.trim()).split('@')[0].split(/[._-]/).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
       // Tandai isNewUser = true supaya layout guard arahkan ke /onboarding
       userStore.login({
         id:             data.user_id,
-        name:           data.name,
-        email:          data.email,
+        name:           nameFallback,
+        email:          data.email || email.trim(),
         favoriteGenres: [],
         token:          data.access_token,
         isNewUser:      true,

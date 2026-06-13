@@ -1,7 +1,7 @@
 <script>
 	/** * Menerima properti dari API GCP.
 	 */
-	let { movie_id, title, confidence: confidence_score, poster_url = null, genre = null } = $props();
+	let { movie_id, title, confidence: confidence_score, poster_url = null, genre = null, onclick = null } = $props();
 
 	// Warna background fallback berdasarkan movie_id (konsisten per film)
 	const fallbackColors = ['#1a1a2e', '#16213e', '#0f3460', '#1b1b2f', '#2d132c', '#1c1c3a'];
@@ -46,7 +46,7 @@
 	}
 </script>
 
-<article class="movie-card" style="--ring-color: {ringColor}">
+<article class="movie-card" style="--ring-color: {ringColor}" onclick={() => onclick?.(movie_id)} aria-hidden="true">
 	<div class="poster-wrap">
 		{#if poster_url && !imgError}
 			<img
