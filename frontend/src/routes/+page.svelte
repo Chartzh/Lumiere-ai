@@ -24,6 +24,30 @@
 	let selectedMood = $state('');
 	let moodMovies = $state([]);
 
+	const moodEmojis = {
+		'santai': '🍃',
+		'ringan': '🍿',
+		'bahagia': '😊',
+		'menegangkan': '⚡',
+		'menantang': '🧗',
+		'mengharukan': '🥺',
+		'penasaran': '🕵️',
+		'nostalgia': '📻',
+		'berpikir': '🧠',
+		'epik': '⚔️',
+		'romantis': '💖',
+		'seram': '👻'
+	};
+
+	async function selectMoodHandler(moodValue) {
+		if (selectedMood === moodValue) {
+			selectedMood = '';
+		} else {
+			selectedMood = moodValue;
+		}
+		await handleMoodChange();
+	}
+
 	let loadingPersonal = $state(true);
 	let loadingPopular = $state(true);
 	let loadingTrending = $state(true);
@@ -257,22 +281,28 @@
 		</section>
 
 		<section class="section mood-section">
-			<div class="section-head" style="align-items: center;">
+			<div class="section-head">
 				<div>
 					<h2 class="section-title">🔮 Mood Discovery</h2>
 					<p class="section-sub">Bagaimana suasana hatimu hari ini? Pilih mood untuk menyesuaikan rekomendasi sinematik AI.</p>
 				</div>
-				<div class="mood-selector-wrap">
-					<select class="mood-select-input" bind:value={selectedMood} onchange={handleMoodChange}>
-						<option value="">-- Pilih Mood --</option>
-						{#each moods as m}
-							{@const moodValue = typeof m === 'object' ? (m.name || m.mood || m.value || '') : m}
-							{@const moodLabel = typeof m === 'object' ? (m.name || m.mood || m.label || moodValue) : m}
-							
-							<option value={moodValue}>{moodLabel}</option>
-						{/each}
-					</select>
-				</div>
+			</div>
+
+			<div class="mood-chips-container">
+				{#each moods as m}
+					{@const moodValue = typeof m === 'object' ? (m.name || m.mood || m.value || '') : m}
+					{@const moodLabel = typeof m === 'object' ? (m.name || m.mood || m.label || moodValue) : m}
+					{@const emoji = moodEmojis[moodValue.toLowerCase()] || '🎬'}
+					
+					<button
+						class="mood-chip"
+						class:active={selectedMood === moodValue}
+						onclick={() => selectMoodHandler(moodValue)}
+					>
+						<span class="mood-emoji">{emoji}</span>
+						<span class="mood-label">{moodLabel}</span>
+					</button>
+				{/each}
 			</div>
 
 			{#if loadingMood}
@@ -504,19 +534,65 @@
 		max-width: 540px;
 	}
 
-	/* Style Input Dropdown Suasana Hati / Mood v5 */
-	.mood-select-input {
+	/* Mood Chips Layout */
+	.mood-chips-container {
+		display: flex;
+		gap: 10px;
+		overflow-x: auto;
+		padding: 4px 4px 14px;
+		margin-bottom: 1rem;
+		scrollbar-width: thin;
+		scrollbar-color: var(--noir-border) transparent;
+	}
+	.mood-chips-container::-webkit-scrollbar {
+		height: 6px;
+	}
+	.mood-chips-container::-webkit-scrollbar-thumb {
+		background: var(--noir-border, #222);
+		border-radius: 99px;
+	}
+	.mood-chips-container::-webkit-scrollbar-track {
+		background: transparent;
+	}
+
+	.mood-chip {
+		display: inline-flex;
+		align-items: center;
+		gap: 8px;
 		background: var(--noir-card, #121218);
 		border: 1px solid var(--noir-border, #222230);
-		color: var(--cream, #f3f3f6);
-		padding: 8px 16px;
-		border-radius: var(--radius-sm, 4px);
+		color: var(--muted, #888);
+		padding: 10px 18px;
+		border-radius: 999px;
 		font-size: 0.85rem;
-		outline: none;
+		font-weight: 500;
 		cursor: pointer;
+		white-space: nowrap;
+		transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+		user-select: none;
 	}
-	.mood-select-input:focus {
-		border-color: var(--gold);
+	.mood-chip:hover {
+		border-color: var(--subtle, #444);
+		color: var(--cream, #f5f5f7);
+		transform: translateY(-2px);
+		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+	}
+	.mood-chip.active {
+		background: radial-gradient(circle at center, rgba(201, 168, 76, 0.15), rgba(201, 168, 76, 0.05));
+		border-color: var(--gold, #c9a84c);
+		color: var(--gold, #c9a84c);
+		box-shadow: 0 0 15px rgba(201, 168, 76, 0.2);
+		font-weight: 600;
+	}
+	.mood-emoji {
+		font-size: 1.15rem;
+		transition: transform 0.2s ease;
+	}
+	.mood-chip:hover .mood-emoji {
+		transform: scale(1.2) rotate(5deg);
+	}
+	.mood-label {
+		text-transform: capitalize;
 	}
 
 	/* ── Grids ── */

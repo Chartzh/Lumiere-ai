@@ -23,6 +23,7 @@
 
   // State untuk form interaksi (ML loops)
   let isFavorite = $state(false);
+  let favoriteInteraction = $state(null);
   let rating = $state(0);
   let reviewText = $state('');
   let submittingInteraction = $state(false);
@@ -77,10 +78,12 @@
       const data = await request(`/api/v1/users/${user.id}/interactions`, { token: user.token });
       const interactions = Array.isArray(data) ? data : (data.results ?? []);
       
-      const fav = interactions.find(i => i.movie_id === id && i.type === 'favorite'); 
-      const rat = interactions.find(i => i.movie_id === id && i.type === 'rating'); 
-      const rev = interactions.find(i => i.movie_id === id && i.type === 'review'); 
+      const numericId = parseInt(id) || 0;
+      const fav = interactions.find(i => i.movie_id === numericId && i.type === 'favorite'); 
+      const rat = interactions.find(i => i.movie_id === numericId && i.type === 'rating'); 
+      const rev = interactions.find(i => i.movie_id === numericId && i.type === 'review'); 
 
+      favoriteInteraction = fav;
       isFavorite = !!fav;
       rating = rat ? rat.rating : 0;
       reviewText = rev ? rev.review : '';
@@ -145,16 +148,31 @@
   async function handleFavorite() {
     submittingInteraction = true; 
     try {
-      await request('/api/v1/interactions', {
-        method: 'POST',
-        body: {
-          user_id: parseInt(user.id),
-          movie_id: movieId,
-          type: 'favorite'
-        },
-        token: user.token
-      });
-      isFavorite = !isFavorite;
+      const numericMovieId = parseInt(movieId) || 0;
+      if (isFavorite && favoriteInteraction) {
+        // Unfavorite: Hapus interaksi dari database
+        const favId = favoriteInteraction.id || favoriteInteraction.interaction_id;
+        await request(`/api/v1/interactions/${favId}`, {
+          method: 'DELETE',
+          token: user.token
+        });
+        isFavorite = false;
+        favoriteInteraction = null;
+      } else {
+        // Favorite: Tambahkan ke database
+        const data = await request('/api/v1/interactions', {
+          method: 'POST',
+          body: {
+            user_id: parseInt(user.id),
+            movie_id: numericMovieId,
+            type: 'favorite'
+          },
+          token: user.token
+        });
+        isFavorite = true;
+        // Simpan data interaksi baru agar bisa dihapus nanti
+        favoriteInteraction = data.interaction ?? data;
+      }
     } catch {
       alert('Gagal memperbarui status favorit.');
     } finally {
@@ -165,11 +183,12 @@
   async function handleRating(score) {
     submittingInteraction = true; 
     try {
+      const numericMovieId = parseInt(movieId) || 0;
       await request('/api/v1/interactions', {
         method: 'POST',
         body: {
           user_id: parseInt(user.id),
-          movie_id: movieId,
+          movie_id: numericMovieId,
           type: 'rating',
           rating: score
         },
@@ -189,11 +208,12 @@
     
     submittingInteraction = true;
     try {
+      const numericMovieId = parseInt(movieId) || 0;
       await request('/api/v1/interactions', {
         method: 'POST',
         body: {
           user_id: parseInt(user.id),
-          movie_id: movieId,
+          movie_id: numericMovieId,
           type: 'review',
           rating: rating || 5,
           review: reviewText.trim()
