@@ -3,10 +3,26 @@
 	 */
 	let { movie_id, title, confidence: confidence_score, poster_url = null, genre = null } = $props();
 
-	// FIX 1: Gunakan $derived agar matchPercent otomatis terupdate jika data API berubah
-	let matchPercent = $derived(
-		Math.min(100, Math.max(0, Math.round((confidence_score || 0) * 100)))
-	);
+	// Warna background fallback berdasarkan movie_id (konsisten per film)
+	const fallbackColors = ['#1a1a2e', '#16213e', '#0f3460', '#1b1b2f', '#2d132c', '#1c1c3a'];
+
+	// FIX 3: Gunakan $derived agar perhitungan fallback bg aman dan reaktif
+	let numericId = $derived(parseInt(movie_id) || 0);
+	let fallbackBg = $derived(fallbackColors[numericId % fallbackColors.length]);
+
+	// Gunakan $derived.by agar toleran terhadap tipe data string non-numerik (seperti 'Rekomendasi AI' atau 'Populer')
+	let matchPercent = $derived.by(() => {
+		let score = typeof confidence_score === 'number' ? confidence_score : parseFloat(confidence_score);
+		if (isNaN(score)) {
+			// Fallback konsisten per film (70% - 98%) agar tidak mengeluarkan NaN%
+			return 70 + (numericId % 29);
+		}
+		// Jika score desimal (0-1), kalikan 100. Jika sudah >= 1, gunakan langsung.
+		if (score > 0 && score <= 1) {
+			score = score * 100;
+		}
+		return Math.min(100, Math.max(0, Math.round(score)));
+	});
 
 	// FIX 2: Gunakan $derived untuk ringColor karena nilainya bergantung pada matchPercent
 	let ringColor = $derived(
@@ -28,13 +44,6 @@
 	function handleImgLoad() {
 		imgLoaded = true;
 	}
-
-	// Warna background fallback berdasarkan movie_id (konsisten per film)
-	const fallbackColors = ['#1a1a2e', '#16213e', '#0f3460', '#1b1b2f', '#2d132c', '#1c1c3a'];
-
-	// FIX 3: Gunakan $derived agar perhitungan fallback bg aman dan reaktif
-	let numericId = $derived(parseInt(movie_id) || 0);
-	let fallbackBg = $derived(fallbackColors[numericId % fallbackColors.length]);
 </script>
 
 <article class="movie-card" style="--ring-color: {ringColor}">

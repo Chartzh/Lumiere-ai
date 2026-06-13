@@ -241,7 +241,7 @@
 						<MovieCard
 							movie_id={film.movie_id}
 							title={film.title}
-							confidence={film.xai_reason?.primary_factor || 'Rekomendasi AI'}
+							confidence={film.confidence ?? film.xai_reason?.primary_factor ?? 'Rekomendasi AI'}
 							poster_url={film.poster_url}
 							genre={film.genres?.[0] ?? film.genre}
 							synopsis={film.synopsis}
