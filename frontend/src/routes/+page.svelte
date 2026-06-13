@@ -263,7 +263,10 @@
 					<select class="mood-select-input" bind:value={selectedMood} onchange={handleMoodChange}>
 						<option value="">-- Pilih Mood --</option>
 						{#each moods as m}
-							<option value={m}>{m}</option>
+							{@const moodValue = typeof m === 'object' ? (m.name || m.mood || m.value || '') : m}
+							{@const moodLabel = typeof m === 'object' ? (m.name || m.mood || m.label || moodValue) : m}
+							
+							<option value={moodValue}>{moodLabel}</option>
 						{/each}
 					</select>
 				</div>
