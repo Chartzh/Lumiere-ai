@@ -2,14 +2,7 @@
 	/**
 	 * routes/+page.svelte
 	 * ─────────────────────────────────────────────────────────────────────
-	 * Halaman utama Lumiere — dashboard rekomendasi film.
-	 *
-	 * Tiga seksi:
-	 *   1. Rekomendasi personal  — dari NCF model berdasarkan user + kebiasaan
-	 *   2. Film Populer          — berdasarkan jumlah rating di MovieLens + klik sistem
-	 *   3. Film Terbaru/Trending — film terbaru yang ditambahkan
-	 *
-	 * Kebiasaan user dicatat via trackClick() setiap user membuka detail film.
+	 * Halaman utama Lumiere — dashboard rekomendasi film & Mood Discovery.
 	 */
 
 	import { onMount } from 'svelte';
@@ -18,16 +11,23 @@
 	import GenreFilter from '$lib/components/GenreFilter.svelte';
 	import LoadingSkeleton from '$lib/components/LoadingSkeleton.svelte';
 	import { userStore, isLoggedIn } from '$lib/stores/user.js';
-	import { fetchRecommendations, fetchPopular, fetchTrending, trackClick } from '$lib/api.js';
+	// Import request tambahan untuk mengamankan panggilan custom endpoint mood v5
+	import { fetchRecommendations, fetchPopular, fetchTrending, trackClick, request } from '$lib/api.js';
 
 	// ── State ──────────────────────────────────────────────────────────────
 	let personal = $state([]); // rekomendasi personal dari NCF
 	let popular = $state([]); // film populer (jumlah rating + klik)
 	let trending = $state([]); // film terbaru
 
+	// State Tambahan untuk Mood Discovery v5
+	let moods = $state([]);
+	let selectedMood = $state('');
+	let moodMovies = $state([]);
+
 	let loadingPersonal = $state(true);
 	let loadingPopular = $state(true);
 	let loadingTrending = $state(true);
+	let loadingMood = $state(false);
 
 	let errorPersonal = $state('');
 	let activeGenre = $state('All');
@@ -38,7 +38,6 @@
 
 	// Ambil semua genre unik dari hasil personal
 	const allGenres = $derived([...new Set(personal.flatMap((m) => m.genres ?? []))].sort());
-
 	// Filter personal berdasarkan genre yang dipilih
 	const displayed = $derived(
 		activeGenre === 'All' ? personal : personal.filter((m) => m.genres?.includes(activeGenre))
@@ -54,10 +53,11 @@
 		// Sembunyikan greeting setelah 3 detik
 		setTimeout(() => (showGreeting = false), 3000);
 
-		// Load tiga seksi paralel
+		// Load seksi paralel bawaan dan opsi mood discovery v5
 		loadPersonal();
 		loadPopular();
 		loadTrending();
+		loadMoodOptions();
 	});
 
 	// ── Fetch personal rekomendasi ─────────────────────────────────────────
@@ -71,6 +71,35 @@
 			errorPersonal = e.message ?? 'Gagal memuat rekomendasi.';
 		} finally {
 			loadingPersonal = false;
+		}
+	}
+
+	// ── Fetch daftar opsi mood resmi v5 ────────────────────────────────────
+	async function loadMoodOptions() {
+		try {
+			const data = await request('/api/v1/moods', { token: user.token });
+			moods = Array.isArray(data) ? data : (data.moods || []);
+		} catch {
+			// Gagal senyap agar tidak merusak seksi utama lain
+		}
+	}
+
+	// ── Fetch film berdasarkan mood yang dipilih v5 ────────────────────────
+	async function handleMoodChange() {
+		if (!selectedMood) {
+			moodMovies = [];
+			return;
+		}
+		loadingMood = true;
+		try {
+			const data = await request(`/api/v1/recommend/mood/${selectedMood}?top_k=15&user_id=${user.id}`, {
+				token: user.token
+			});
+			moodMovies = Array.isArray(data) ? data : (data.results ?? data.recommendations ?? []);
+		} catch {
+			// Gagal senyap
+		} finally {
+			loadingMood = false;
 		}
 	}
 
@@ -102,7 +131,6 @@
 
 	/**
 	 * Normalisasi response API ke format yang dipakai MovieCard.
-	 * Backend bisa kembalikan 'genres' sebagai array atau string CSV.
 	 */
 	function enrichMovies(raw) {
 		return raw.map((m) => ({
@@ -119,7 +147,7 @@
 	// ── Tracking klik (catat kebiasaan user) ──────────────────────────────
 	function handleCardClick(movieId) {
 		if (user?.token) trackClick({ movie_id: movieId }, user.token);
-		// TODO: buka modal detail film
+		// Note: Pemicu modal detail dapat dihubungkan di sini jika komponen modal sudah siap dipanggil
 	}
 
 	// ── Logout ─────────────────────────────────────────────────────────────
@@ -130,7 +158,6 @@
 </script>
 
 <div class="page">
-	<!-- ── Navbar ──────────────────────────────────────────────────────── -->
 	<nav class="navbar">
 		<div class="nav-brand">
 			<span class="brand-star">✦</span>
@@ -145,7 +172,6 @@
 		</div>
 	</nav>
 
-	<!-- ── Hero greeting (muncul sekali) ──────────────────────────────── -->
 	{#if showGreeting && user}
 		<div class="greeting-banner">
 			<span class="greeting-emoji">👋</span>
@@ -160,7 +186,6 @@
 	{/if}
 
 	<main class="content">
-		<!-- ══ SEKSI 1: Rekomendasi Personal ══════════════════════════════ -->
 		<section class="section">
 			<div class="section-head">
 				<div>
@@ -217,7 +242,7 @@
 						<MovieCard
 							movie_id={film.movie_id}
 							title={film.title}
-							confidence={film.confidence_score}
+							confidence={film.xai_reason?.primary_factor || 'Rekomendasi AI'}
 							poster_url={film.poster_url}
 							genre={film.genres?.[0] ?? film.genre}
 							synopsis={film.synopsis}
@@ -228,7 +253,43 @@
 			{/if}
 		</section>
 
-		<!-- ══ SEKSI 2: Film Populer ═══════════════════════════════════════ -->
+		<section class="section mood-section">
+			<div class="section-head" style="align-items: center;">
+				<div>
+					<h2 class="section-title">🔮 Mood Discovery</h2>
+					<p class="section-sub">Bagaimana suasana hatimu hari ini? Pilih mood untuk menyesuaikan rekomendasi sinematik AI.</p>
+				</div>
+				<div class="mood-selector-wrap">
+					<select class="mood-select-input" bind:value={selectedMood} onchange={handleMoodChange}>
+						<option value="">-- Pilih Mood --</option>
+						{#each moods as m}
+							<option value={m}>{m}</option>
+						{/each}
+					</select>
+				</div>
+			</div>
+
+			{#if loadingMood}
+				<LoadingSkeleton count={5} />
+			{:else if moodMovies.length > 0}
+				<div class="movie-grid">
+					{#each moodMovies as film (film.movie_id)}
+						<MovieCard
+							movie_id={film.movie_id}
+							title={film.title}
+							confidence={film.xai_reason?.primary_factor || `Nuansa ${selectedMood}`}
+							poster_url={film.poster_url}
+							genre={Array.isArray(film.genres) ? film.genres[0] : (film.genre || 'Movie')}
+							synopsis={film.synopsis}
+							onclick={handleCardClick}
+						/>
+					{/each}
+				</div>
+			{:else if selectedMood}
+				<div class="section-empty" style="text-align: center; padding: 2rem 0;">Tidak ada rekomendasi khusus untuk mood {selectedMood}.</div>
+			{/if}
+		</section>
+
 		<section class="section">
 			<div class="section-head">
 				<div>
@@ -249,7 +310,7 @@
 						<MovieCard
 							movie_id={film.movie_id}
 							title={film.title}
-							confidence={film.confidence_score ?? 0}
+							confidence={film.xai_reason?.primary_factor || 'Populer'}
 							poster_url={film.poster_url}
 							genre={film.genres?.[0] ?? film.genre}
 							synopsis={film.synopsis}
@@ -262,7 +323,6 @@
 			{/if}
 		</section>
 
-		<!-- ══ SEKSI 3: Film Terbaru ═══════════════════════════════════════ -->
 		<section class="section">
 			<div class="section-head">
 				<div>
@@ -281,7 +341,7 @@
 						<MovieCard
 							movie_id={film.movie_id}
 							title={film.title}
-							confidence={film.confidence_score ?? 0}
+							confidence={film.xai_reason?.primary_factor || 'Baru Ditambahkan'}
 							poster_url={film.poster_url}
 							genre={film.genres?.[0] ?? film.genre}
 							synopsis={film.synopsis}
@@ -295,26 +355,11 @@
 		</section>
 	</main>
 
-	<nav
-		class="navbar"
-		style="position: static; border-top: 1px solid var(--noir-border); border-bottom: none; justify-content: center; background: transparent; padding: 1rem;"
-	>
+	<nav class="navbar" style="position: static; border-top: 1px solid var(--noir-border); border-bottom: none; justify-content: center; background: transparent; padding: 1rem;">
 		<div class="nav-right" style="gap: 1.5rem;">
-			<a
-				href="/"
-				class="brand-name"
-				style="text-decoration: none; font-size: 0.85rem; color: var(--gold);">Beranda</a
-			>
-			<a
-				href="/favorites"
-				class="brand-name"
-				style="text-decoration: none; font-size: 0.85rem; color: var(--muted);">Favorit Saya</a
-			>
-			<a
-				href="/profile"
-				class="brand-name"
-				style="text-decoration: none; font-size: 0.85rem; color: var(--muted);">Profil Selera</a
-			>
+			<a href="/" class="brand-name" style="text-decoration: none; font-size: 0.85rem; color: var(--gold);">Beranda</a>
+			<a href="/favorites" class="brand-name" style="text-decoration: none; font-size: 0.85rem; color: var(--muted);">Favorit Saya</a>
+			<a href="/profile" class="brand-name" style="text-decoration: none; font-size: 0.85rem; color: var(--muted);">Profil Selera</a>
 		</div>
 	</nav>
 
@@ -453,6 +498,21 @@
 		max-width: 540px;
 	}
 
+	/* Style Input Dropdown Suasana Hati / Mood v5 */
+	.mood-select-input {
+		background: var(--noir-card, #121218);
+		border: 1px solid var(--noir-border, #222230);
+		color: var(--cream, #f3f3f6);
+		padding: 8px 16px;
+		border-radius: var(--radius-sm, 4px);
+		font-size: 0.85rem;
+		outline: none;
+		cursor: pointer;
+	}
+	.mood-select-input:focus {
+		border-color: var(--gold);
+	}
+
 	/* ── Grids ── */
 	.movie-grid {
 		display: grid;
@@ -460,7 +520,6 @@
 		gap: 12px;
 		margin-top: 14px;
 	}
-	/* Row untuk populer & trending: scroll horizontal di mobile */
 	.movie-row {
 		display: grid;
 		grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
