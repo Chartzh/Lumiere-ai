@@ -160,8 +160,7 @@
 <div class="page">
 	<nav class="navbar">
 		<div class="nav-brand">
-			<span class="brand-star">✦</span>
-			<span class="brand-name">Lumiere</span>
+			<img src="/logo.png" alt="Lumiere Logo" width="80" height="80" />
 			<span class="brand-tag">INTELLIGENT MOVIE DISCOVERY · NEURAL COLLABORATIVE FILTERING</span>
 		</div>
 		<div class="nav-right">
