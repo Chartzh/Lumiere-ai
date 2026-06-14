@@ -75,8 +75,7 @@
 
   <div class="ob-header">
     <div class="brand">
-      <span class="brand-star">✦</span>
-      <span class="brand-name">Lumiere</span>
+      <img src="/logo.webp" alt="Lumiere Logo" width="80" height="80" />
     </div>
 
     <div class="step-wrap">
@@ -156,8 +155,6 @@
   gap: 1rem; flex-wrap: wrap;
 }
 .brand { display: flex; align-items: center; gap: 6px; }
-.brand-star { color: var(--gold); }
-.brand-name { color: var(--cream); font-size: 1.1rem; font-weight: 500; }
 
 .step-wrap { display: flex; align-items: center; gap: 10px; }
 .step-bar {

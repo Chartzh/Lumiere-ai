@@ -48,8 +48,7 @@
   <div class="glow" aria-hidden="true"></div>
 
   <a href="/" class="brand" tabindex="-1">
-    <span class="brand-star">✦</span>
-    <span class="brand-name">Lumiere</span>
+    <img src="/logo.webp" alt="Lumiere Logo" width="120" height="120" />
   </a>
   <p class="brand-tag">INTELLIGENT MOVIE DISCOVERY</p>
 
@@ -113,8 +112,6 @@
   display: flex; align-items: center; gap: 6px;
   text-decoration: none; margin-bottom: 2px;
 }
-.brand-star { color: var(--gold); font-size: 1rem; }
-.brand-name { color: var(--cream); font-size: 1.15rem; font-weight: 500; }
 .brand-tag  { font-size: .65rem; color: var(--subtle); letter-spacing: .1em; margin-bottom: 1.75rem; }
 
 .card {

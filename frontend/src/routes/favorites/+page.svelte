@@ -97,8 +97,7 @@
 <div class="page">
   <nav class="navbar">
     <div class="nav-brand">
-      <span class="brand-star">✦</span>
-      <span class="brand-name">Lumiere</span>
+      <img src="/logo.webp" alt="Lumiere Logo" width="80" height="80" />
       <span class="brand-tag">MY FAVORITES</span>
     </div>
     <div class="nav-right">
@@ -211,7 +210,6 @@
     padding: .9rem 1.5rem; gap: 1rem;
   }
   .nav-brand   { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-  .brand-star  { color: var(--gold); }
   .brand-name  { color: var(--cream); font-size: 1rem; font-weight: 500; }
   .brand-tag   { font-size: .6rem; color: #444455; letter-spacing: .08em; }
   .nav-right   { display: flex; align-items: center; gap: 10px; }

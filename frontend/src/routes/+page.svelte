@@ -188,7 +188,7 @@
 <div class="page">
 	<nav class="navbar">
 		<div class="nav-brand">
-			<img src="/logo.png" alt="Lumiere Logo" width="80" height="80" />
+			<img src="/logo.webp" alt="Lumiere Logo" width="80" height="80" />
 			<span class="brand-tag">INTELLIGENT MOVIE DISCOVERY · NEURAL COLLABORATIVE FILTERING</span>
 		</div>
 		<div class="nav-right">
@@ -440,9 +440,6 @@
 		align-items: center;
 		gap: 8px;
 		flex-wrap: wrap;
-	}
-	.brand-star {
-		color: var(--gold);
 	}
 	.brand-name {
 		color: var(--cream);

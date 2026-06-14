@@ -246,9 +246,10 @@
 <div class="page">
   <!-- Navbar Header -->
   <nav class="navbar">
-    <div class="nav-brand" onclick={() => goto('/')} style="cursor: pointer;">
-      <span class="brand-star">✦</span>
-      <span class="brand-name">Lumiere</span>
+    <div class="nav-brand">
+      <img src="/logo.webp" alt="Lumiere Logo" width="80" height="80" />
+      <span class="brand-tag">INTELLIGENT MOVIE DISCOVERY · NEURAL COLLABORATIVE FILTERING</span>
+    
     </div>
     <div class="nav-right">
       {#if user}
@@ -530,8 +531,6 @@
     display: flex; align-items: center; justify-content: space-between;
     padding: 0.9rem 1.5rem; gap: 1rem;
   }
-  .brand-star { color: var(--gold); }
-  .brand-name { color: var(--cream); font-size: 1.15rem; font-weight: 500; letter-spacing: 0.05em; }
   .nav-right { display: flex; align-items: center; gap: 10px; }
   .nav-user { font-size: 0.8rem; color: var(--muted); }
   .nav-user strong { color: var(--cream); }

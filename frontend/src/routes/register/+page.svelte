@@ -62,8 +62,7 @@
   <div class="glow" aria-hidden="true"></div>
 
   <a href="/" class="brand" tabindex="-1">
-    <span class="brand-star">✦</span>
-    <span class="brand-name">Lumiere</span>
+    <img src="/logo.webp" alt="Lumiere Logo" width="120" height="120" />
   </a>
   <p class="brand-tag">INTELLIGENT MOVIE DISCOVERY</p>
 
