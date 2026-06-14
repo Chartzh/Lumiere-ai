@@ -37,7 +37,30 @@
         token: user.token 
       });
       // Antisipasi jika response langsung berupa array atau dibungkus objek results
-      favorites = Array.isArray(data) ? data : (data.results ?? []);
+      const interactions = Array.isArray(data) ? data : (data.interactions ?? data.results ?? []);
+      
+      // Fetch detail film untuk setiap interaksi secara paralel
+      favorites = await Promise.all(
+        interactions.map(async (item) => {
+          try {
+            const detailData = await request(`/api/v1/movie/${item.movie_id}`, { token: user.token });
+            return {
+              ...item,
+              movie: detailData.movie
+            };
+          } catch (err) {
+            return {
+              ...item,
+              movie: {
+                movie_id: item.movie_id,
+                title: `Film #${item.movie_id}`,
+                poster_url: '',
+                genres: ['Movie']
+              }
+            };
+          }
+        })
+      );
     } catch (e) {
       error = e.message || 'Gagal memuat daftar favorit.';
     } finally {

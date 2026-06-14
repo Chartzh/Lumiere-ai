@@ -76,7 +76,7 @@
   async function loadUserInteractions(id) {
     try {
       const data = await request(`/api/v1/users/${user.id}/interactions`, { token: user.token });
-      const interactions = Array.isArray(data) ? data : (data.results ?? []);
+      const interactions = Array.isArray(data) ? data : (data.interactions ?? data.results ?? []);
       
       const numericId = parseInt(id) || 0;
       const fav = interactions.find(i => i.movie_id === numericId && i.type === 'favorite'); 
