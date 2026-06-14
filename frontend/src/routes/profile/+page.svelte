@@ -11,6 +11,10 @@
   // ── State (Svelte 5 Runes) ─────────────────────────────────────────────
   let profile = $state(null);
   let evolution = $state([]);
+  let realLikedCount = $state(0); // Fallback riil untuk jumlah film favorit
+  let fallbackGenresDistribution = $state(null); // Fallback riil untuk distribusi genre
+  let fallbackDirectors = $state([]); // Fallback riil untuk sutradara favorit
+  let fallbackActors = $state([]); // Fallback riil untuk aktor favorit
   let loading = $state(true);
   let refreshing = $state(false);
   let error = $state('');
@@ -31,11 +35,98 @@
     try {
       // 1. Ambil Ringkasan Profil Selera v5 (Gunakan fungsi request asli dengan prefix /api/v1)
       const profileRes = await request(`/api/v1/profile/${user.id}?include_credits=true`, { token: user.token });
-      profile = profileRes;
+      // Deteksi envelope .data dan fallback ke objek kosong jika tidak ada data valid
+      const profileData = profileRes?.data ?? profileRes;
+      profile = profileData && typeof profileData === 'object' ? profileData : {};
 
       // 2. Ambil Deret Snapshot Evolusi v5
       const evolutionRes = await request(`/api/v1/profile/${user.id}/evolution`, { token: user.token });
-      evolution = Array.isArray(evolutionRes) ? evolutionRes : (evolutionRes.results ?? []);
+      // Menangani pembungkus .data secara aman dengan fallback array kosong
+      const evolutionData = evolutionRes?.data ?? evolutionRes;
+      evolution = Array.isArray(evolutionData) ? evolutionData : (evolutionData?.results ?? []);
+
+      // 3. Mengambil data interaksi favorit secara langsung untuk jaminan fallback yang akurat
+      const favsRes = await request(`/api/v1/users/${user.id}/interactions?type=favorite`, { token: user.token });
+      const favsData = favsRes?.data ?? favsRes;
+      const favsArray = Array.isArray(favsData) ? favsData : (favsData?.interactions ?? favsData?.results ?? []);
+      realLikedCount = favsArray.length;
+
+      // 4. Hitung fallback distribusi genre, sutradara, dan aktor jika kosong dari backend
+      const backendGenres = profile?.genre_distribution;
+      const backendDirectors = profile?.favorite_directors;
+      const backendActors = profile?.favorite_actors;
+
+      const needsFallback = realLikedCount > 0 && (
+        (!backendGenres || Object.keys(backendGenres).length === 0) ||
+        (!backendDirectors || backendDirectors.length === 0) ||
+        (!backendActors || backendActors.length === 0)
+      );
+
+      if (needsFallback) {
+        const genreCounts = {};
+        const directorCounts = {};
+        const actorCounts = {};
+        let totalGenresCount = 0;
+
+        // Ambil detail film (termasuk credits) secara paralel
+        const movieDetails = await Promise.allSettled(
+          favsArray.map(item => request(`/api/v1/movie/${item.movie_id}?include_credits=true`, { token: user.token }))
+        );
+
+        movieDetails.forEach(res => {
+          if (res.status === 'fulfilled') {
+            const movie = res.value?.movie ?? res.value;
+            
+            // Proses Genre
+            const genres = movie?.genres ?? (movie?.genre ? [movie.genre] : []);
+            genres.forEach(g => {
+              if (g) {
+                genreCounts[g] = (genreCounts[g] || 0) + 1;
+                totalGenresCount++;
+              }
+            });
+
+            // Proses Sutradara
+            const directors = movie?.directors ?? [];
+            directors.forEach(d => {
+              if (d) {
+                directorCounts[d] = (directorCounts[d] || 0) + 1;
+              }
+            });
+
+            // Proses Aktor/Pemeran
+            const cast = movie?.cast ?? [];
+            cast.forEach(actor => {
+              if (actor?.name) {
+                actorCounts[actor.name] = (actorCounts[actor.name] || 0) + 1;
+              }
+            });
+          }
+        });
+
+        // Simpan data ke state fallback jika data backend kosong
+        if (totalGenresCount > 0 && (!backendGenres || Object.keys(backendGenres).length === 0)) {
+          const computedDist = {};
+          Object.entries(genreCounts).forEach(([genre, count]) => {
+            computedDist[genre] = Math.round((count / totalGenresCount) * 100);
+          });
+          fallbackGenresDistribution = computedDist;
+        }
+
+        if (!backendDirectors || backendDirectors.length === 0) {
+          fallbackDirectors = Object.entries(directorCounts)
+            .sort((a, b) => b[1] - a[1])
+            .map(entry => entry[0])
+            .slice(0, 3);
+        }
+
+        if (!backendActors || backendActors.length === 0) {
+          fallbackActors = Object.entries(actorCounts)
+            .sort((a, b) => b[1] - a[1])
+            .map(entry => entry[0])
+            .slice(0, 5);
+        }
+      }
     } catch (e) {
       error = e.message || 'Gagal memuat profil selera.';
     } finally {
@@ -59,11 +150,36 @@
 
   // Transformasi objek genre_distribution menjadi array terurut untuk Bar Chart
   const sortedGenres = $derived(
-    profile?.genre_distribution
+    (profile?.genre_distribution && Object.keys(profile.genre_distribution).length > 0)
       ? Object.entries(profile.genre_distribution)
           .map(([name, value]) => ({ name, value }))
           .sort((a, b) => b.value - a.value)
-      : []
+      : (fallbackGenresDistribution
+          ? Object.entries(fallbackGenresDistribution)
+              .map(([name, value]) => ({ name, value }))
+              .sort((a, b) => b.value - a.value)
+          : [])
+  );
+
+  // Cari genre dominan terbesar secara aman
+  const dominantGenres = $derived(
+    profile?.dominant_genres && profile.dominant_genres.length > 0
+      ? profile.dominant_genres
+      : (sortedGenres.length > 0 ? [sortedGenres[0].name] : [])
+  );
+
+  // Cari sutradara terfavorit secara aman
+  const displayDirectors = $derived(
+    profile?.favorite_directors && profile.favorite_directors.length > 0
+      ? profile.favorite_directors
+      : fallbackDirectors
+  );
+
+  // Cari aktor terfavorit secara aman
+  const displayActors = $derived(
+    profile?.favorite_actors && profile.favorite_actors.length > 0
+      ? profile.favorite_actors
+      : fallbackActors
   );
 </script>
 
@@ -100,7 +216,7 @@
           <button class="btn-gold-sm" onclick={loadProfileData}>Coba Lagi</button>
         </div>
       </div>
-    {:else if profile}
+    {:else if (profile && Object.keys(profile).length > 0) || realLikedCount > 0}
       <header class="profile-header">
         <div>
           <h1 class="title">DNA Seleramu</h1>
@@ -132,12 +248,12 @@
         <div class="side-panel">
           <div class="metrics-card highlight">
             <h4 class="card-meta">Dominant Genre & Mood</h4>
-            <div class="highlight-val">{profile.dominant_genres?.[0] || 'N/A'}</div>
+            <div class="highlight-val">{dominantGenres?.[0] || 'N/A'}</div>
             <p class="highlight-sub">
               Suasana Favorit: <span>{profile.favorite_mood || 'Universal'}</span>
             </p>
             <div class="confidence-badge">
-              Tingkat Akurasi AI: {(profile.confidence * 100 || 80).toFixed(0)}%
+              Tingkat Akurasi AI: {((profile.confidence ?? 0.8) * 100).toFixed(0)}%
             </div>
           </div>
 
@@ -146,15 +262,17 @@
             <div class="meta-list">
               <div class="meta-item">
                 <strong>Sutradara:</strong>
-                <span>{profile.favorite_directors?.join(', ') || 'Belum terdeteksi'}</span>
+                <span>{displayDirectors.join(', ') || 'Belum terdeteksi'}</span>
               </div>
               <div class="meta-item">
                 <strong>Aktor/Aktris:</strong>
-                <span>{profile.favorite_actors?.join(', ') || 'Belum terdeteksi'}</span>
+                <span>{displayActors.join(', ') || 'Belum terdeteksi'}</span>
               </div>
               <div class="meta-item border-top">
                 <strong>Total Film Disukai:</strong>
-                <span class="gold-text">{profile.stats?.interaction_liked_count || 0} Judul</span>
+                <span class="gold-text">
+                  {profile.stats?.interaction_liked_count || profile.interaction_liked_count || realLikedCount} Judul
+                </span>
               </div>
             </div>
           </div>
@@ -171,9 +289,25 @@
         {#if evolution.length > 1}
           {@const points = evolution.map((snap, i) => {
             const x = (i / (evolution.length - 1)) * 460 + 20;
-            const likedCount = snap.stats?.interaction_liked_count || snap.interaction_liked_count || 0;
-            const y = 130 - Math.min(100, likedCount * 15);
-            return { x, y, likedCount, label: `Snap ${i + 1}` };
+            
+            // Cek apakah data bertipe persentase (taste_depth, depth_score, confidence)
+            const isPercentage = (snap.taste_depth !== undefined) || 
+                                 (snap.depth_score !== undefined) || 
+                                 (snap.confidence !== undefined);
+            
+            // Ekstraksi nilai secara dinamis
+            const value = snap.taste_depth || 
+                          snap.depth_score || 
+                          (snap.confidence ? (snap.confidence <= 1 ? Math.round(snap.confidence * 100) : snap.confidence) : null) || 
+                          snap.stats?.interaction_liked_count || 
+                          snap.interaction_liked_count || 
+                          0;
+            
+            // Penskalaan sumbu Y: Jika persentase langsung dipetakan 0-100, jika hitungan film dikali faktor skala 15
+            const y = 130 - Math.min(100, isPercentage ? value : value * 15);
+            const unit = isPercentage ? '%' : ' Film';
+            
+            return { x, y, value, unit, label: `Snap ${i + 1}` };
           })}
 
           <div class="svg-chart-wrap">
@@ -209,7 +343,7 @@
                   stroke-width="2"
                 />
                 <text x={pt.x} y={pt.y - 10} text-anchor="middle" class="chart-text-val"
-                  >{pt.likedCount} Film</text
+                  >{pt.value}{pt.unit}</text
                 >
                 <text x={pt.x} y="145" text-anchor="middle" class="chart-text-label"
                   >{pt.label}</text
@@ -223,6 +357,19 @@
             pada film untuk menumbuhkan snapshot baru!
           </div>
         {/if}
+      </div>
+    {:else}
+      <div class="error-state">
+        <span class="error-icon">⚠</span>
+        <div>
+          <div class="error-title">Profil Belum Siap</div>
+          <div class="error-msg">
+            Data profil Anda kosong atau belum terhitung oleh AI. Silakan klik tombol di bawah untuk memicu hitung ulang.
+          </div>
+          <button class="btn-gold-sm" onclick={handleRefreshProfile} disabled={refreshing}>
+            {refreshing ? '🔄 Memproses...' : '⚡ Hitung Selera Baru'}
+          </button>
+        </div>
       </div>
     {/if}
   </main>
@@ -495,6 +642,54 @@
     color: var(--muted);
     font-size: 0.9rem;
   }
+  .error-state {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
+    background: var(--noir-card, #121218);
+    border: 1px solid var(--noir-border, #222230);
+    border-radius: var(--radius-lg, 12px);
+    padding: 2.5rem 1.5rem;
+    max-width: 600px;
+    margin: 3rem auto;
+    text-align: left;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+  }
+  .error-icon {
+    font-size: 2.5rem;
+    color: #e05252;
+  }
+  .error-title {
+    font-size: 1.15rem;
+    font-weight: 500;
+    color: var(--cream);
+    margin-bottom: 0.5rem;
+  }
+  .error-msg {
+    font-size: 0.85rem;
+    color: var(--muted);
+    margin-bottom: 1rem;
+    line-height: 1.5;
+  }
+  .btn-gold-sm {
+    padding: 6px 14px;
+    background: var(--gold);
+    border: none;
+    color: #09090e;
+    font-size: 0.8rem;
+    font-weight: 500;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+  }
+  .btn-gold-sm:hover:not(:disabled) {
+    opacity: 0.85;
+  }
+  .btn-gold-sm:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
   .section-empty {
     font-size: 0.825rem;
     color: var(--subtle);
