@@ -97,11 +97,14 @@
 <div class="page">
   <nav class="navbar">
     <div class="nav-brand">
-      <img src="/logo.webp" alt="Lumiere Logo" width="80" height="80" />
+      <img src="/logo.webp" alt="Lumiere Logo" width="100" height="100" style="object-fit: contain;" />
       <span class="brand-tag">MY FAVORITES</span>
     </div>
     <div class="nav-right">
       {#if user}
+        <a href="/" class="nav-link">Beranda</a>
+        <a href="/favorites" class="nav-link active">Favorit Saya</a>
+        <a href="/profile" class="nav-link">Profil Selera</a>
         <span class="nav-user">Halo, <strong>{user.name}</strong></span>
         <button class="btn-ghost" onclick={() => { userStore.logout(); goto('/login'); }}>Keluar</button>
       {/if}
@@ -176,13 +179,7 @@
     </section>
   </main>
 
-  <nav class="navbar" style="position: static; border-top: 1px solid var(--noir-border); border-bottom: none; justify-content: center; background: transparent; padding: 1rem;">
-    <div class="nav-right" style="gap: 1.5rem;">
-      <a href="/" class="brand-name" style="text-decoration: none; font-size: 0.85rem; color: var(--muted);">Beranda</a>
-      <a href="/favorites" class="brand-name" style="text-decoration: none; font-size: 0.85rem; color: var(--gold);">Favorit Saya</a>
-      <a href="/profile" class="brand-name" style="text-decoration: none; font-size: 0.85rem; color: var(--muted);">Profil Selera</a>
-    </div>
-  </nav>
+
 
   <footer class="site-footer">
     Lumiere © 2026 · PJK-GM074 · Pijak × IBM SkillsBuild ·
@@ -215,6 +212,12 @@
   .nav-right   { display: flex; align-items: center; gap: 10px; }
   .nav-user    { font-size: .8rem; color: var(--muted); }
   .nav-user strong { color: var(--cream); }
+  .nav-link {
+    font-size: 0.85rem; color: var(--muted); text-decoration: none;
+    padding: 4px 6px; border-radius: var(--radius-sm); transition: color 0.2s;
+  }
+  .nav-link:hover { color: var(--cream); }
+  .nav-link.active { color: var(--gold); }
 
   .section { margin-top: 2.5rem; }
   .section-head {
@@ -278,6 +281,7 @@
   @media (max-width: 640px) {
     .movie-grid { grid-template-columns: repeat(2, 1fr); gap: 12px; }
     .brand-tag { display: none; }
+    .nav-link { display: none; }
     .content { padding: 0 1rem 2rem; }
   }
   @media (min-width: 1024px) {

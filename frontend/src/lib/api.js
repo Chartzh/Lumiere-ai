@@ -35,39 +35,6 @@ export async function request(path, { method = 'GET', body, token } = {}) {
   return data;
 }
 
-
-/*hapus code ini ketika backend siap
-export async function request(path, { method = 'GET', body, token } = {}) {
-  // --- KODE MOCK DATA MULAI ---
-  console.log(`[Mock API] ${method} ${path}`);
-  await new Promise(resolve => setTimeout(resolve, 500)); // Simulasi loading
-
-  if (path.includes('/auth/login')) {
-    return {
-      user_id: 99, name: "Herlita", email: body?.email || "herlita@lumiere.com",
-      favorite_genres: ["Sci-Fi", "Action"], access_token: "mock_token_123"
-    };
-  }
-  if (path.includes('/auth/register')) {
-    return { user_id: 99, name: body?.name || "User Baru", access_token: "mock_token_123", is_new_user: true };
-  }
-  if (path.includes('/recommend')) {
-    return [
-      { id: 101, title: "Lumiere: Interstellar AI", genre: "Sci-Fi", rating: 4.9 },
-      { id: 102, title: "Cybersecurity Protocol", genre: "Action", rating: 4.7 }
-    ];
-  }
-  if (path.includes('/movies/popular') || path.includes('/movies/trending')) {
-    return [{ id: 201, title: "Inception", genre: "Sci-Fi", rating: 4.8 }];
-  }
-  if (path.includes('/events/')) {
-    return { status: "success" };
-  }
-  return {};
-  // --- KODE MOCK DATA SELESAI ---
-}
-*/
-
 // ── Auth ────────────────────────────────────────────────────────────────────
 
 /**
@@ -105,15 +72,26 @@ export function fetchRecommendations(payload, token) {
  * @param {{ limit? }} params
  */
 export function fetchPopular(params = {}) {
-  return request('/api/v1/recommend/trending');
+  const limit = params.limit ?? 10;
+  return request(`/api/v1/movies/popular?limit=${limit}`);
 }
 
 /**
- * Film terbaru / trending.
+ * Film terbaru yang baru ditambahkan ke dataset.
  * @param {{ limit? }} params
  */
 export function fetchTrending(params = {}) {
-  return request('/api/v1/recommend/trending');
+  const limit = params.limit ?? 10;
+  return request(`/api/v1/movies/trending?limit=${limit}`);
+}
+
+/**
+ * Film di luar zona nyaman user — Serendipity via MMR.
+ * @param {number} user_id
+ * @param {string} token
+ */
+export function fetchSerendipity(user_id, token) {
+  return request(`/api/v1/recommend/serendipity?user_id=${user_id}&top_k=12`, { token });
 }
 
 // ── Event tracking (kebiasaan user) ─────────────────────────────────────────

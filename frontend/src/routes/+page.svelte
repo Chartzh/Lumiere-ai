@@ -12,12 +12,14 @@
 	import LoadingSkeleton from '$lib/components/LoadingSkeleton.svelte';
 	import { userStore, isLoggedIn } from '$lib/stores/user.js';
 	// Import request tambahan untuk mengamankan panggilan custom endpoint mood v5
-	import { fetchRecommendations, fetchPopular, fetchTrending, trackClick, request } from '$lib/api.js';
+	import { fetchRecommendations, fetchPopular, fetchTrending, fetchSerendipity, trackClick, request } from '$lib/api.js';
 
 	// ── State ──────────────────────────────────────────────────────────────
 	let personal = $state([]); // rekomendasi personal dari NCF
 	let popular = $state([]); // film populer (jumlah rating + klik)
 	let trending = $state([]); // film terbaru
+	let serendipity = $state([]); // film di luar zona nyaman (MMR)
+	let loadingSerendipity = $state(true);
 
 	// State Tambahan untuk Mood Discovery v5
 	let moods = $state([]);
@@ -64,7 +66,7 @@
 	const allGenres = $derived([...new Set(personal.flatMap((m) => m.genres ?? []))].sort());
 	// Filter personal berdasarkan genre yang dipilih
 	const displayed = $derived(
-		activeGenre === 'All' ? personal : personal.filter((m) => m.genres?.includes(activeGenre))
+		(activeGenre === 'All' ? personal : personal.filter((m) => m.genres?.includes(activeGenre))).slice(0, 12)
 	);
 
 	// ── Load data saat mount ───────────────────────────────────────────────
@@ -82,6 +84,7 @@
 		loadPopular();
 		loadTrending();
 		loadMoodOptions();
+		loadSerendipity();
 	});
 
 	// ── Fetch personal rekomendasi ─────────────────────────────────────────
@@ -89,7 +92,7 @@
 		loadingPersonal = true;
 		errorPersonal = '';
 		try {
-			const data = await fetchRecommendations({ user_id: user.id, top_k: 20 }, user.token);
+			const data = await fetchRecommendations({ user_id: user.id, top_k: 12 }, user.token);
 			personal = enrichMovies(data.recommendations ?? []);
 		} catch (e) {
 			errorPersonal = e.message ?? 'Gagal memuat rekomendasi.';
@@ -153,6 +156,19 @@
 		}
 	}
 
+	// ── Fetch serendipity (di luar zona nyaman) ──────────────────────────────
+	async function loadSerendipity() {
+		loadingSerendipity = true;
+		try {
+			const data = await fetchSerendipity(user.id, user.token);
+			serendipity = enrichMovies(data.recommendations ?? data.results ?? data ?? []);
+		} catch {
+			// Gagal senyap — fitur bonus, bukan kritis
+		} finally {
+			loadingSerendipity = false;
+		}
+	}
+
 	/**
 	 * Normalisasi response API ke format yang dipakai MovieCard.
 	 */
@@ -188,11 +204,14 @@
 <div class="page">
 	<nav class="navbar">
 		<div class="nav-brand">
-			<img src="/logo.webp" alt="Lumiere Logo" width="80" height="80" />
+			<img src="/logo.webp" alt="Lumiere Logo" width="100" height="100" style="object-fit: contain;" />
 			<span class="brand-tag">INTELLIGENT MOVIE DISCOVERY · NEURAL COLLABORATIVE FILTERING</span>
 		</div>
 		<div class="nav-right">
 			{#if user}
+				<a href="/" class="nav-link">Beranda</a>
+				<a href="/favorites" class="nav-link">Favorit Saya</a>
+				<a href="/profile" class="nav-link">Profil Selera</a>
 				<span class="nav-user">Halo, <strong>{user.name}</strong></span>
 				<button class="btn-ghost" onclick={handleLogout}>Keluar</button>
 			{/if}
@@ -389,15 +408,42 @@
 				<div class="section-empty">Data trending belum tersedia.</div>
 			{/if}
 		</section>
+
+		<section class="section serendipity-section">
+			<div class="section-head">
+				<div>
+					<h2 class="section-title">🧭 Di Luar Zona Nyamanmu</h2>
+					<p class="section-sub">
+						Permata tersembunyi yang mungkin tak akan kamu temukan sendiri.
+					</p>
+				</div>
+			</div>
+
+			{#if loadingSerendipity}
+				<div class="row-scroll">
+					<LoadingSkeleton count={6} />
+				</div>
+			{:else if serendipity.length > 0}
+				<div class="movie-row">
+					{#each serendipity as film (film.movie_id)}
+						<MovieCard
+							movie_id={film.movie_id}
+							title={film.title}
+							confidence={film.xai_reason?.primary_factor || 'Di luar zona nyamanmu'}
+							poster_url={film.poster_url}
+							genre={film.genres?.[0] ?? film.genre}
+							synopsis={film.synopsis}
+							onclick={handleCardClick}
+						/>
+					{/each}
+				</div>
+			{:else}
+				<div class="section-empty">Data serendipity belum tersedia.</div>
+			{/if}
+		</section>
 	</main>
 
-	<nav class="navbar" style="position: static; border-top: 1px solid var(--noir-border); border-bottom: none; justify-content: center; background: transparent; padding: 1rem;">
-		<div class="nav-right" style="gap: 1.5rem;">
-			<a href="/" class="brand-name" style="text-decoration: none; font-size: 0.85rem; color: var(--gold);">Beranda</a>
-			<a href="/favorites" class="brand-name" style="text-decoration: none; font-size: 0.85rem; color: var(--muted);">Favorit Saya</a>
-			<a href="/profile" class="brand-name" style="text-decoration: none; font-size: 0.85rem; color: var(--muted);">Profil Selera</a>
-		</div>
-	</nav>
+
 
 	<footer class="site-footer">
 		Lumiere © 2026 · PJK-GM074 · Pijak × IBM SkillsBuild ·
@@ -455,6 +501,20 @@
 		display: flex;
 		align-items: center;
 		gap: 10px;
+	}
+	.nav-link {
+		font-size: 0.85rem;
+		color: var(--muted);
+		text-decoration: none;
+		padding: 4px 6px;
+		border-radius: var(--radius-sm);
+		transition: color 0.2s;
+	}
+	.nav-link:hover {
+		color: var(--cream);
+	}
+	.nav-link[href="/"] {
+		color: var(--gold);
 	}
 	.nav-user {
 		font-size: 0.8rem;
@@ -595,7 +655,7 @@
 	/* ── Grids ── */
 	.movie-grid {
 		display: grid;
-		grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+		grid-template-columns: repeat(2, 1fr);
 		gap: 12px;
 		margin-top: 14px;
 	}
@@ -657,6 +717,27 @@
 		font-size: 0.825rem;
 		color: var(--subtle);
 		padding: 0.75rem 0;
+	}
+
+	/* ── Serendipity section ── */
+	.serendipity-section {
+		position: relative;
+		padding: 1.5rem;
+		border-radius: var(--radius-md, 10px);
+		background: linear-gradient(
+			135deg,
+			rgba(201, 168, 76, 0.04) 0%,
+			rgba(100, 80, 200, 0.04) 100%
+		);
+		border: 1px solid rgba(201, 168, 76, 0.12);
+	}
+	.serendipity-section::before {
+		content: '';
+		position: absolute;
+		inset: 0;
+		border-radius: inherit;
+		background: radial-gradient(ellipse at top left, rgba(201, 168, 76, 0.06), transparent 60%);
+		pointer-events: none;
 	}
 
 	/* ── Buttons ── */
@@ -722,12 +803,18 @@
 
 	/* ── Responsive ── */
 	@media (max-width: 640px) {
-		.movie-grid,
+		.movie-grid {
+			grid-template-columns: repeat(2, 1fr);
+			gap: 8px;
+		}
 		.movie-row {
 			grid-template-columns: repeat(2, 1fr);
 			gap: 8px;
 		}
 		.brand-tag {
+			display: none;
+		}
+		.nav-link {
 			display: none;
 		}
 		.content {
@@ -737,12 +824,22 @@
 			padding: 0.75rem 1rem;
 		}
 	}
+	@media (min-width: 640px) {
+		.movie-grid {
+			grid-template-columns: repeat(3, 1fr);
+		}
+	}
 	@media (min-width: 1024px) {
 		.movie-grid {
-			grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+			grid-template-columns: repeat(4, 1fr);
 		}
 		.movie-row {
 			grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+		}
+	}
+	@media (min-width: 1280px) {
+		.movie-grid {
+			grid-template-columns: repeat(6, 1fr);
 		}
 	}
 </style>
