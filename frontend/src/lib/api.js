@@ -13,8 +13,10 @@
  *   POST /api/v1/events/rating   — catat rating film
  */
 
+import { PUBLIC_API_BASE } from '$env/static/public';
 
-export const API_BASE = 'https://lumiere-api-32400975992.asia-southeast2.run.app';
+
+export const API_BASE = PUBLIC_API_BASE;
 
 // ── Helper request ──────────────────────────────────────────────────────────
 
@@ -94,7 +96,7 @@ export function fetchSerendipity(user_id, token) {
  * @param {string} token
  */
 export function trackClick(payload, token) {
-  return request('/api/v1/events/click', { method: 'POST', body: payload, token }).catch(() => {});
+  return request('/api/v1/events/click', { method: 'POST', body: payload, token }).catch(() => { });
 }
 
 /**
@@ -103,5 +105,5 @@ export function trackClick(payload, token) {
  * @param {string} token
  */
 export function trackRating(payload, token) {
-  return request('/api/v1/events/rating', { method: 'POST', body: payload, token }).catch(() => {});
+  return request('/api/v1/events/rating', { method: 'POST', body: payload, token }).catch(() => { });
 }
