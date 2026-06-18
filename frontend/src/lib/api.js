@@ -9,7 +9,6 @@
  *   POST /api/v1/auth/login      — login, dapat JWT
  *   POST /api/v1/recommend       — rekomendasi personal (butuh token)
  *   GET  /api/v1/movies/popular  — film populer (jumlah rating)
- *   GET  /api/v1/movies/trending — film terbaru / trending
  *   POST /api/v1/events/click    — catat klik film (kebiasaan user)
  *   POST /api/v1/events/rating   — catat rating film
  */
@@ -64,7 +63,9 @@ export function login(payload) {
  * @param {string} token
  */
 export function fetchRecommendations(payload, token) {
-  return request('/api/v1/recommend', { method: 'POST', body: payload, token });
+  const { top_k, ...body } = payload;
+  const url = top_k ? `/api/v1/recommend?top_k=${top_k}` : '/api/v1/recommend';
+  return request(url, { method: 'POST', body, token });
 }
 
 /**
@@ -72,17 +73,8 @@ export function fetchRecommendations(payload, token) {
  * @param {{ limit? }} params
  */
 export function fetchPopular(params = {}) {
-  const limit = params.limit ?? 10;
-  return request(`/api/v1/movies/popular?limit=${limit}`);
-}
-
-/**
- * Film terbaru yang baru ditambahkan ke dataset.
- * @param {{ limit? }} params
- */
-export function fetchTrending(params = {}) {
-  const limit = params.limit ?? 10;
-  return request(`/api/v1/movies/trending?limit=${limit}`);
+  const top_k = params.limit ?? 10;
+  return request(`/api/v1/recommend/trending?top_k=${top_k}`);
 }
 
 /**
@@ -91,7 +83,7 @@ export function fetchTrending(params = {}) {
  * @param {string} token
  */
 export function fetchSerendipity(user_id, token) {
-  return request(`/api/v1/recommend/serendipity?user_id=${user_id}&top_k=12`, { token });
+  return request(`/api/v1/recommend/serendipity/${user_id}?top_k=12`, { token });
 }
 
 // ── Event tracking (kebiasaan user) ─────────────────────────────────────────

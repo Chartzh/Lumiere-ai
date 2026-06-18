@@ -11,13 +11,11 @@
 	import GenreFilter from '$lib/components/GenreFilter.svelte';
 	import LoadingSkeleton from '$lib/components/LoadingSkeleton.svelte';
 	import { userStore, isLoggedIn } from '$lib/stores/user.js';
-	// Import request tambahan untuk mengamankan panggilan custom endpoint mood v5
-	import { fetchRecommendations, fetchPopular, fetchTrending, fetchSerendipity, trackClick, request } from '$lib/api.js';
+	import { fetchRecommendations, fetchPopular, fetchSerendipity, trackClick, request } from '$lib/api.js';
 
 	// ── State ──────────────────────────────────────────────────────────────
 	let personal = $state([]); // rekomendasi personal dari NCF
 	let popular = $state([]); // film populer (jumlah rating + klik)
-	let trending = $state([]); // film terbaru
 	let serendipity = $state([]); // film di luar zona nyaman (MMR)
 	let loadingSerendipity = $state(true);
 
@@ -52,7 +50,6 @@
 
 	let loadingPersonal = $state(true);
 	let loadingPopular = $state(true);
-	let loadingTrending = $state(true);
 	let loadingMood = $state(false);
 
 	let errorPersonal = $state('');
@@ -82,7 +79,6 @@
 		// Load seksi paralel bawaan dan opsi mood discovery v5
 		loadPersonal();
 		loadPopular();
-		loadTrending();
 		loadMoodOptions();
 		loadSerendipity();
 	});
@@ -119,7 +115,7 @@
 		}
 		loadingMood = true;
 		try {
-			const data = await request(`/api/v1/recommend/mood/${selectedMood}?top_k=15&user_id=${user.id}`, {
+			const data = await request(`/api/v1/recommend/mood/${selectedMood}?top_k=12&user_id=${user.id}`, {
 				token: user.token
 			});
 			moodMovies = enrichMovies(Array.isArray(data) ? data : (data.recommendations ?? data.results ?? data ?? []));
@@ -134,25 +130,12 @@
 	async function loadPopular() {
 		loadingPopular = true;
 		try {
-			const data = await fetchPopular({ limit: 10 });
+			const data = await fetchPopular({ limit: 12 });
 			popular = enrichMovies(data.recommendations ?? data.results ?? data ?? []);
 		} catch {
 			// Gagal senyap — seksi ini tidak kritis
 		} finally {
 			loadingPopular = false;
-		}
-	}
-
-	// ── Fetch trending ─────────────────────────────────────────────────────
-	async function loadTrending() {
-		loadingTrending = true;
-		try {
-			const data = await fetchTrending({ limit: 10 });
-			trending = enrichMovies(data.recommendations ?? data.results ?? data ?? []);
-		} catch {
-			// Gagal senyap
-		} finally {
-			loadingTrending = false;
 		}
 	}
 
@@ -375,37 +358,6 @@
 				</div>
 			{:else}
 				<div class="section-empty">Data populer belum tersedia.</div>
-			{/if}
-		</section>
-
-		<section class="section">
-			<div class="section-head">
-				<div>
-					<h2 class="section-title">✨ Film Terbaru</h2>
-					<p class="section-sub">Film yang baru-baru ini ditambahkan ke dataset.</p>
-				</div>
-			</div>
-
-			{#if loadingTrending}
-				<div class="row-scroll">
-					<LoadingSkeleton count={6} />
-				</div>
-			{:else if trending.length > 0}
-				<div class="movie-row">
-					{#each trending as film (film.movie_id)}
-						<MovieCard
-							movie_id={film.movie_id}
-							title={film.title}
-							confidence={film.xai_reason?.primary_factor || 'Baru Ditambahkan'}
-							poster_url={film.poster_url}
-							genre={film.genres?.[0] ?? film.genre}
-							synopsis={film.synopsis}
-							onclick={handleCardClick}
-						/>
-					{/each}
-				</div>
-			{:else}
-				<div class="section-empty">Data trending belum tersedia.</div>
 			{/if}
 		</section>
 
