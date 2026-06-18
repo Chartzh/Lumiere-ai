@@ -13,19 +13,24 @@
   let error    = $state('');
   let showPass = $state(false);
 
-  async function handleLogin() {
+  const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+
+  async function handleLogin(e) {
+    if (e) e.preventDefault();
     error = '';
     if (!email.trim())  { error = 'Email wajib diisi.'; return; }
-    if (!email.includes('@')) { error = 'Format email tidak valid.'; return; }
+    if (!emailRegex.test(email.trim())) { error = 'Format email tidak valid (contoh: nama@email.com).'; return; }
     if (!password)      { error = 'Password wajib diisi.'; return; }
 
     loading = true;
     try {
       const data = await login({ email: email.trim(), password });
+      const nameFallback = data.name || data.username || data.display_name || 
+        (data.email || email.trim()).split('@')[0].split(/[._-]/).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
       userStore.login({
         id:             data.user_id,
-        name:           data.name,
-        email:          data.email,
+        name:           nameFallback,
+        email:          data.email || email.trim(),
         favoriteGenres: data.favorite_genres ?? [],
         token:          data.access_token,
         isNewUser:      false,
@@ -37,16 +42,13 @@
       loading = false;
     }
   }
-
-  function onKey(e) { if (e.key === 'Enter') handleLogin(); }
 </script>
 
 <div class="auth-page">
   <div class="glow" aria-hidden="true"></div>
 
   <a href="/" class="brand" tabindex="-1">
-    <span class="brand-star">✦</span>
-    <span class="brand-name">Lumiere</span>
+    <img src="/logo.webp" alt="Lumiere Logo" width="120" height="120" />
   </a>
   <p class="brand-tag">INTELLIGENT MOVIE DISCOVERY</p>
 
@@ -54,34 +56,36 @@
     <h1 class="card-title">Selamat datang kembali</h1>
     <p class="card-sub">Masuk untuk melanjutkan rekomendasi personalmu.</p>
 
-    <div class="field">
-      <label for="email">Email</label>
-      <input id="email" type="email" placeholder="nama@email.com"
-        bind:value={email} onkeydown={onKey}
-        autocomplete="email" disabled={loading} />
-    </div>
-
-    <div class="field">
-      <label for="password">Password</label>
-      <div class="input-wrap">
-        <input id="password" type={showPass ? 'text' : 'password'}
-          placeholder="••••••••" bind:value={password} onkeydown={onKey}
-          autocomplete="current-password" disabled={loading} />
-        <button class="eye" type="button"
-          onclick={() => showPass = !showPass}
-          aria-label={showPass ? 'Sembunyikan' : 'Tampilkan'}>
-          {showPass ? '🙈' : '👁️'}
-        </button>
+    <form onsubmit={handleLogin} novalidate>
+      <div class="field">
+        <label for="email">Email</label>
+        <input id="email" type="email" placeholder="nama@email.com"
+          bind:value={email}
+          autocomplete="email" disabled={loading} />
       </div>
-    </div>
 
-    {#if error}
-      <div class="error-box" role="alert">⚠ {error}</div>
-    {/if}
+      <div class="field">
+        <label for="password">Password</label>
+        <div class="input-wrap">
+          <input id="password" type={showPass ? 'text' : 'password'}
+            placeholder="••••••••" bind:value={password}
+            autocomplete="current-password" disabled={loading} />
+          <button class="eye" type="button"
+            onclick={() => showPass = !showPass}
+            aria-label={showPass ? 'Sembunyikan' : 'Tampilkan'}>
+            {showPass ? '🙈' : '👁️'}
+          </button>
+        </div>
+      </div>
 
-    <button class="btn-gold" onclick={handleLogin} disabled={loading}>
-      {#if loading}<span class="spin"></span> Masuk...{:else}Masuk{/if}
-    </button>
+      {#if error}
+        <div class="error-box" role="alert">⚠ {error}</div>
+      {/if}
+
+      <button class="btn-gold" type="submit" disabled={loading}>
+        {#if loading}<span class="spin"></span> Masuk...{:else}Masuk{/if}
+      </button>
+    </form>
 
     <p class="switch">Belum punya akun? <a href="/register">Daftar sekarang</a></p>
   </div>
@@ -108,8 +112,6 @@
   display: flex; align-items: center; gap: 6px;
   text-decoration: none; margin-bottom: 2px;
 }
-.brand-star { color: var(--gold); font-size: 1rem; }
-.brand-name { color: var(--cream); font-size: 1.15rem; font-weight: 500; }
 .brand-tag  { font-size: .65rem; color: var(--subtle); letter-spacing: .1em; margin-bottom: 1.75rem; }
 
 .card {

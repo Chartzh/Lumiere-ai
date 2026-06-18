@@ -9,7 +9,6 @@
  *   POST /api/v1/auth/login      — login, dapat JWT
  *   POST /api/v1/recommend       — rekomendasi personal (butuh token)
  *   GET  /api/v1/movies/popular  — film populer (jumlah rating)
- *   GET  /api/v1/movies/trending — film terbaru / trending
  *   POST /api/v1/events/click    — catat klik film (kebiasaan user)
  *   POST /api/v1/events/rating   — catat rating film
  */
@@ -34,39 +33,6 @@ export async function request(path, { method = 'GET', body, token } = {}) {
   if (!res.ok) throw new Error(data.detail ?? `HTTP ${res.status}`);
   return data;
 }
-
-
-/*hapus code ini ketika backend siap
-export async function request(path, { method = 'GET', body, token } = {}) {
-  // --- KODE MOCK DATA MULAI ---
-  console.log(`[Mock API] ${method} ${path}`);
-  await new Promise(resolve => setTimeout(resolve, 500)); // Simulasi loading
-
-  if (path.includes('/auth/login')) {
-    return {
-      user_id: 99, name: "Herlita", email: body?.email || "herlita@lumiere.com",
-      favorite_genres: ["Sci-Fi", "Action"], access_token: "mock_token_123"
-    };
-  }
-  if (path.includes('/auth/register')) {
-    return { user_id: 99, name: body?.name || "User Baru", access_token: "mock_token_123", is_new_user: true };
-  }
-  if (path.includes('/recommend')) {
-    return [
-      { id: 101, title: "Lumiere: Interstellar AI", genre: "Sci-Fi", rating: 4.9 },
-      { id: 102, title: "Cybersecurity Protocol", genre: "Action", rating: 4.7 }
-    ];
-  }
-  if (path.includes('/movies/popular') || path.includes('/movies/trending')) {
-    return [{ id: 201, title: "Inception", genre: "Sci-Fi", rating: 4.8 }];
-  }
-  if (path.includes('/events/')) {
-    return { status: "success" };
-  }
-  return {};
-  // --- KODE MOCK DATA SELESAI ---
-}
-*/
 
 // ── Auth ────────────────────────────────────────────────────────────────────
 
@@ -97,7 +63,9 @@ export function login(payload) {
  * @param {string} token
  */
 export function fetchRecommendations(payload, token) {
-  return request('/api/v1/recommend', { method: 'POST', body: payload, token });
+  const { top_k, ...body } = payload;
+  const url = top_k ? `/api/v1/recommend?top_k=${top_k}` : '/api/v1/recommend';
+  return request(url, { method: 'POST', body, token });
 }
 
 /**
@@ -105,17 +73,17 @@ export function fetchRecommendations(payload, token) {
  * @param {{ limit? }} params
  */
 export function fetchPopular(params = {}) {
-  const q = new URLSearchParams(params).toString();
-  return request(`/api/v1/movies/popular${q ? '?' + q : ''}`);
+  const top_k = params.limit ?? 10;
+  return request(`/api/v1/recommend/trending?top_k=${top_k}`);
 }
 
 /**
- * Film terbaru / trending.
- * @param {{ limit? }} params
+ * Film di luar zona nyaman user — Serendipity via MMR.
+ * @param {number} user_id
+ * @param {string} token
  */
-export function fetchTrending(params = {}) {
-  const q = new URLSearchParams(params).toString();
-  return request(`/api/v1/movies/trending${q ? '?' + q : ''}`);
+export function fetchSerendipity(user_id, token) {
+  return request(`/api/v1/recommend/serendipity/${user_id}?top_k=12`, { token });
 }
 
 // ── Event tracking (kebiasaan user) ─────────────────────────────────────────

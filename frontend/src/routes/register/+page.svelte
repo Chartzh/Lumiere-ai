@@ -16,21 +16,26 @@
   let error     = $state('');
   let showPass  = $state(false);
 
-  async function handleRegister() {
+  const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+
+  async function handleRegister(e) {
+    if (e) e.preventDefault();
     error = '';
     if (!name.trim())         { error = 'Nama wajib diisi.'; return; }
-    if (!email.includes('@')) { error = 'Format email tidak valid.'; return; }
+    if (!emailRegex.test(email.trim())) { error = 'Format email tidak valid (contoh: nama@email.com).'; return; }
     if (password.length < 8)  { error = 'Password minimal 8 karakter.'; return; }
     if (password !== confirm)  { error = 'Password dan konfirmasi tidak cocok.'; return; }
 
     loading = true;
     try {
       const data = await register({ name: name.trim(), email: email.trim(), password });
+      const nameFallback = data.name || data.username || data.display_name || name.trim() || 
+        (data.email || email.trim()).split('@')[0].split(/[._-]/).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
       // Tandai isNewUser = true supaya layout guard arahkan ke /onboarding
       userStore.login({
         id:             data.user_id,
-        name:           data.name,
-        email:          data.email,
+        name:           nameFallback,
+        email:          data.email || email.trim(),
         favoriteGenres: [],
         token:          data.access_token,
         isNewUser:      true,
@@ -42,8 +47,6 @@
       loading = false;
     }
   }
-
-  function onKey(e) { if (e.key === 'Enter') handleRegister(); }
 
   // Indikator kekuatan password
   const strength = $derived(
@@ -59,8 +62,7 @@
   <div class="glow" aria-hidden="true"></div>
 
   <a href="/" class="brand" tabindex="-1">
-    <span class="brand-star">✦</span>
-    <span class="brand-name">Lumiere</span>
+    <img src="/logo.webp" alt="Lumiere Logo" width="120" height="120" />
   </a>
   <p class="brand-tag">INTELLIGENT MOVIE DISCOVERY</p>
 
@@ -68,65 +70,67 @@
     <h1 class="card-title">Buat akun baru</h1>
     <p class="card-sub">Daftar dan kami akan mempelajari selera filmmu.</p>
 
-    <div class="field">
-      <label for="name">Nama tampilan</label>
-      <input id="name" type="text" placeholder="Nama kamu"
-        bind:value={name} onkeydown={onKey}
-        autocomplete="name" disabled={loading} />
-    </div>
-
-    <div class="field">
-      <label for="email">Email</label>
-      <input id="email" type="email" placeholder="nama@email.com"
-        bind:value={email} onkeydown={onKey}
-        autocomplete="email" disabled={loading} />
-    </div>
-
-    <div class="field">
-      <label for="password">Password</label>
-      <div class="input-wrap">
-        <input id="password" type={showPass ? 'text' : 'password'}
-          placeholder="Min. 8 karakter" bind:value={password} onkeydown={onKey}
-          autocomplete="new-password" disabled={loading} />
-        <button class="eye" type="button"
-          onclick={() => showPass = !showPass}
-          aria-label={showPass ? 'Sembunyikan' : 'Tampilkan'}>
-          {showPass ? '🙈' : '👁️'}
-        </button>
+    <form onsubmit={handleRegister} novalidate>
+      <div class="field">
+        <label for="name">Nama tampilan</label>
+        <input id="name" type="text" placeholder="Nama kamu"
+          bind:value={name}
+          autocomplete="name" disabled={loading} />
       </div>
-      {#if password.length > 0}
-        <div class="strength-row">
-          <div class="strength-bars">
-            {#each [1,2,3] as s}
-              <div class="bar" class:active={strength >= s}
-                style="background: {strength >= s ? strengthColor[strength] : ''}"></div>
-            {/each}
-          </div>
-          <span class="strength-label" style="color:{strengthColor[strength]}">
-            {strengthLabel[strength]}
-          </span>
+
+      <div class="field">
+        <label for="email">Email</label>
+        <input id="email" type="email" placeholder="nama@email.com"
+          bind:value={email}
+          autocomplete="email" disabled={loading} />
+      </div>
+
+      <div class="field">
+        <label for="password">Password</label>
+        <div class="input-wrap">
+          <input id="password" type={showPass ? 'text' : 'password'}
+            placeholder="Min. 8 karakter" bind:value={password}
+            autocomplete="new-password" disabled={loading} />
+          <button class="eye" type="button"
+            onclick={() => showPass = !showPass}
+            aria-label={showPass ? 'Sembunyikan' : 'Tampilkan'}>
+            {showPass ? '🙈' : '👁️'}
+          </button>
         </div>
+        {#if password.length > 0}
+          <div class="strength-row">
+            <div class="strength-bars">
+              {#each [1,2,3] as s}
+                <div class="bar" class:active={strength >= s}
+                  style="background: {strength >= s ? strengthColor[strength] : ''}"></div>
+              {/each}
+            </div>
+            <span class="strength-label" style="color:{strengthColor[strength]}">
+              {strengthLabel[strength]}
+            </span>
+          </div>
+        {/if}
+      </div>
+
+      <div class="field">
+        <label for="confirm">Konfirmasi password</label>
+        <input id="confirm" type="password" placeholder="Ulangi password"
+          bind:value={confirm}
+          autocomplete="new-password" disabled={loading}
+          class:mismatch={confirm.length > 0 && confirm !== password} />
+        {#if confirm.length > 0 && confirm !== password}
+          <span class="mismatch-hint">Password tidak cocok</span>
+        {/if}
+      </div>
+
+      {#if error}
+        <div class="error-box" role="alert">⚠ {error}</div>
       {/if}
-    </div>
 
-    <div class="field">
-      <label for="confirm">Konfirmasi password</label>
-      <input id="confirm" type="password" placeholder="Ulangi password"
-        bind:value={confirm} onkeydown={onKey}
-        autocomplete="new-password" disabled={loading}
-        class:mismatch={confirm.length > 0 && confirm !== password} />
-      {#if confirm.length > 0 && confirm !== password}
-        <span class="mismatch-hint">Password tidak cocok</span>
-      {/if}
-    </div>
-
-    {#if error}
-      <div class="error-box" role="alert">⚠ {error}</div>
-    {/if}
-
-    <button class="btn-gold" onclick={handleRegister} disabled={loading}>
-      {#if loading}<span class="spin"></span> Mendaftar...{:else}Daftar & Lanjut{/if}
-    </button>
+      <button class="btn-gold" type="submit" disabled={loading}>
+        {#if loading}<span class="spin"></span> Mendaftar...{:else}Daftar & Lanjut{/if}
+      </button>
+    </form>
 
     <p class="switch">Sudah punya akun? <a href="/login">Masuk</a></p>
   </div>
