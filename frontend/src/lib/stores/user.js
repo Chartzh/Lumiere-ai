@@ -35,12 +35,18 @@ function createUserStore() {
     login(userData) {
       set(userData);
       localStorage.setItem(STORAGE_KEY, JSON.stringify(userData));
+      if (typeof sessionStorage !== 'undefined') {
+        sessionStorage.removeItem('lumiere_greeting_shown');
+      }
     },
 
     /** Hapus session saat logout */
     logout() {
       set(null);
       localStorage.removeItem(STORAGE_KEY);
+      if (typeof sessionStorage !== 'undefined') {
+        sessionStorage.removeItem('lumiere_greeting_shown');
+      }
     },
 
     /** Update sebagian data — misal setelah onboarding selesai */

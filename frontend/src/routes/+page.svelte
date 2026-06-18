@@ -54,7 +54,7 @@
 
 	let errorPersonal = $state('');
 	let activeGenre = $state('All');
-	let showGreeting = $state(true);
+	let showGreeting = $state(false);
 
 	// ── Computed ───────────────────────────────────────────────────────────
 	const user = $derived($userStore);
@@ -73,8 +73,13 @@
 			return;
 		}
 
-		// Sembunyikan greeting setelah 3 detik
-		setTimeout(() => (showGreeting = false), 3000);
+		// Tampilkan greeting hanya pada saat user login pertama kali saja (per session / sejak login)
+		if (typeof sessionStorage !== 'undefined' && !sessionStorage.getItem('lumiere_greeting_shown')) {
+			showGreeting = true;
+			sessionStorage.setItem('lumiere_greeting_shown', 'true');
+			// Sembunyikan greeting setelah 3 detik
+			setTimeout(() => (showGreeting = false), 3000);
+		}
 
 		// Load seksi paralel bawaan dan opsi mood discovery v5
 		loadPersonal();

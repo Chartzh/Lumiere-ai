@@ -247,12 +247,14 @@
   <!-- Navbar Header -->
   <nav class="navbar">
     <div class="nav-brand">
-      <img src="/logo.webp" alt="Lumiere Logo" width="80" height="80" />
+      <img src="/logo.webp" alt="Lumiere Logo" width="100" height="100" style="object-fit: contain;" />
       <span class="brand-tag">INTELLIGENT MOVIE DISCOVERY · NEURAL COLLABORATIVE FILTERING</span>
-    
     </div>
     <div class="nav-right">
       {#if user}
+        <a href="/" class="nav-link">Beranda</a>
+        <a href="/favorites" class="nav-link">Favorit Saya</a>
+        <a href="/profile" class="nav-link">Profil Selera</a>
         <span class="nav-user">Halo, <strong>{user.name}</strong></span>
         <button class="btn-ghost" onclick={() => { userStore.logout(); goto('/login'); }}>Keluar</button>
       {/if}
@@ -531,7 +533,29 @@
     display: flex; align-items: center; justify-content: space-between;
     padding: 0.9rem 1.5rem; gap: 1rem;
   }
+  .nav-brand {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .brand-tag {
+    font-size: 0.6rem;
+    color: #444455;
+    letter-spacing: 0.08em;
+  }
   .nav-right { display: flex; align-items: center; gap: 10px; }
+  .nav-link {
+    font-size: 0.85rem;
+    color: var(--muted);
+    text-decoration: none;
+    padding: 4px 6px;
+    border-radius: var(--radius-sm);
+    transition: color 0.2s;
+  }
+  .nav-link:hover {
+    color: var(--cream);
+  }
   .nav-user { font-size: 0.8rem; color: var(--muted); }
   .nav-user strong { color: var(--cream); }
 
@@ -796,5 +820,9 @@
     .poster-wrap-detail { width: 140px; }
     .movie-title { font-size: 1.8rem; }
     .movie-backdrop { height: 280px; padding: 1rem; }
+  }
+  @media (max-width: 640px) {
+    .brand-tag { display: none; }
+    .nav-link { display: none; }
   }
 </style>
