@@ -112,6 +112,19 @@ Lumiere's recommender is a **Neural Collaborative Filtering (NeuMF)** network co
 | Optimizer / Loss | Adam (lr=0.001) / MSE |
 | Regularization | L2 (1e-4), EarlyStopping, ReduceLROnPlateau |
 
+## 📦 Model Access
+
+The trained NCF model (`lumiere_ncf.h5`) is hosted on Google Drive.
+Access has been granted to `pijak@student.devacademy.id` (Viewer) for review.
+
+- **Download link:** https://drive.google.com/drive/folders/1-OdS4JOwHswj9SZ7zyxqZ7-zdvU8GoRQ?usp=sharing
+- **How to load:** download the `.h5` file and load it via
+  `tensorflow.keras.models.load_model("lumiere_ncf.h5")`, or let the backend
+  fetch it automatically at startup (see `backend/app/main.py`).
+
+Model specs: NeuMF (GMF + MLP), input = (user_id, movie_id), output = predicted
+rating (sigmoid, scaled 1–5). Trained on MovieLens 1M.
+
 ### 📊 Results
 
 | Metric | Score |
