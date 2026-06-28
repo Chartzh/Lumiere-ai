@@ -45,7 +45,7 @@ async def lifespan(app: FastAPI):
 
     # 2. Muat model NCF
     print("=== [STARTUP] Loading TensorFlow Model... ===")
-    url = "https://ccodbglbolcxaohndouu.supabase.co/storage/v1/object/public/models/lumiere_ncf.h5"
+    url = "https://rnepwikrsgohhmfahmox.supabase.co/storage/v1/object/public/models/lumiere_ncf.h5"
     dest_path = "/tmp/lumiere_ncf.h5"
     try:
         download_model(url, dest_path)
